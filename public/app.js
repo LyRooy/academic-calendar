@@ -430,49 +430,6 @@ function deleteEvent() {
   }
 }
 
-// --- Struktura roku akademickiego ------------------------------------------
-
-function renderSpecialDaysList() {
-  const container = $('specialDayList');
-  container.replaceChildren();
-
-  const specialDays = [...(state.plan.academicYear?.specialDays || [])].sort((a, b) =>
-    a.date.localeCompare(b.date),
-  );
-
-  if (!specialDays.length) {
-    container.append(
-      node('p', 'hint', 'Brak zdefiniowanych dni wolnych i zamian planu. Dodaj je poniżej.'),
-    );
-    return;
-  }
-
-  for (const sd of specialDays) {
-    const row = node('div', 'specialdayrow');
-    const info = node('div', 'specialdayrow-info');
-
-    const dateLine = node('div', 'specialdayrow-date');
-    const badge = node('span', `badge ${sd.type}`, sd.type === 'holiday' ? 'Wolne' : 'Zamiana');
-    dateLine.append(node('span', '', sd.date), badge);
-
-    let descText = sd.label || '';
-    if (sd.type === 'swap') {
-      const targetName = DAY_KEY_NAMES[sd.targetDay] || sd.targetDay;
-      const swapDesc = `Zajęcia według planu z ${targetName}`;
-      descText = descText ? `${swapDesc} (${descText})` : swapDesc;
-    }
-    const desc = node('div', 'specialdayrow-desc', descText);
-
-    info.append(dateLine, desc);
-
-    const deleteBtn = node('button', 'danger', 'Usuń');
-    deleteBtn.type = 'button';
-    deleteBtn.onclick = () => deleteSpecialDay(sd.date);
-
-    row.append(info, deleteBtn);
-    container.append(row);
-  }
-}
 
 // --- Struktura roku akademickiego ------------------------------------------
 
