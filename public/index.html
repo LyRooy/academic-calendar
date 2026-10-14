@@ -28,6 +28,7 @@
       <section class="toolbar" aria-label="Zarządzanie planem">
         <div class="actions">
           <button type="button" id="subjects">Przedmioty</button>
+          <button type="button" id="academicYearBtn">Struktura roku</button>
           <button type="button" id="export">Eksport JSON</button>
           <button type="button" id="importButton">Import JSON</button>
           <input type="file" id="import" accept="application/json,.json" hidden>
@@ -62,8 +63,8 @@
       <div id="calendar" class="calendar"></div>
 
       <p class="hint">
-        Kliknij zajęcia, żeby zmienić termin, salę lub usunąć spotkanie.
-        Godziny są godzinami lokalnymi uczelni (Polska).
+        Kliknij nagłówek dnia lub pusty dzień, aby dodać zajęcia w tym dniu. Kliknij zajęcia, żeby zmienić termin, salę lub usunąć spotkanie.
+        W zakładce „Struktura roku” zdefiniujesz święta, dni rektorskie oraz dni z planem według innego dnia tygodnia.
       </p>
     </main>
 
@@ -221,6 +222,63 @@
         </p>
 
         <button type="submit" class="primary">Zapisz ustawienie</button>
+      </form>
+    </dialog>
+
+    <!-- Okno: struktura roku akademickiego -->
+    <dialog id="academicYearDialog">
+      <form id="academicYearForm">
+        <div class="dialoghead">
+          <h2>Struktura roku akademickiego</h2>
+          <button type="button" data-close aria-label="Zamknij">×</button>
+        </div>
+
+        <p class="hint">
+          Zarządzaj dniami wolnymi (święta, dni rektorskie/dziekańskie) oraz dniami, w których zajęcia odbywają się według innego dnia tygodnia (np. środa realizowana według planu z piątku).
+        </p>
+
+        <div id="specialDayList"></div>
+
+        <h3 class="dialog-subhead">Dodaj dzień specjalny</h3>
+        <div class="pair">
+          <label>
+            Data
+            <input id="specialDayDate" type="date" required min="2000-01-01" max="2100-12-31">
+          </label>
+          <label>
+            Typ dnia
+            <select id="specialDayType">
+              <option value="holiday">Dzień wolny (święto / rektorski)</option>
+              <option value="swap">Zajęcia według innego dnia</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="swapTargetContainer" hidden>
+          <label>
+            Zajęcia realizowane według planu z dnia:
+            <select id="specialDayTargetDay">
+              <option value="mon">Poniedziałek</option>
+              <option value="tue">Wtorek</option>
+              <option value="wed">Środa</option>
+              <option value="thu">Czwartek</option>
+              <option value="fri">Piątek</option>
+              <option value="sat">Sobota</option>
+              <option value="sun">Niedziela</option>
+            </select>
+          </label>
+        </div>
+
+        <label>
+          Nazwa / powód (opcjonalnie)
+          <input id="specialDayLabel" maxlength="120" placeholder="np. Wszystkich Świętych, Plan z piątku">
+        </label>
+
+        <p id="academicYearError" class="error" role="alert"></p>
+
+        <div class="dialogfoot">
+          <button type="submit" class="primary">Dodaj do struktury roku</button>
+        </div>
       </form>
     </dialog>
   </body>

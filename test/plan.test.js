@@ -108,6 +108,34 @@ test('walidacja dat, godzin i relacji', () => {
   assert.throws(() => datesFor('2026-10-14', '2026-09-01', 'weekly'));
 });
 
+test('walidacja struktury roku akademickiego', () => {
+  const plan = samplePlan();
+  plan.academicYear = {
+    specialDays: [
+      { date: '2026-11-01', type: 'holiday', label: 'Wszystkich Świętych' },
+      { date: '2026-11-10', type: 'swap', label: 'Środa z piątku', targetDay: 'fri' },
+    ],
+  };
+  assert.equal(validatePlan(plan).academicYear.specialDays.length, 2);
+
+  // Duplikat daty w strukturze roku
+  const duplicateDate = samplePlan();
+  duplicateDate.academicYear = {
+    specialDays: [
+      { date: '2026-11-01', type: 'holiday', label: 'Dzień 1' },
+      { date: '2026-11-01', type: 'holiday', label: 'Dzień 2' },
+    ],
+  };
+  assert.throws(() => validatePlan(duplicateDate));
+
+  // Swap bez prawidłowego targetDay
+  const badSwap = samplePlan();
+  badSwap.academicYear = {
+    specialDays: [{ date: '2026-11-10', type: 'swap', label: 'Błędny swap', targetDay: 'invalid' }],
+  };
+  assert.throws(() => validatePlan(badSwap));
+});
+
 // --- API -----------------------------------------------------------------------
 
 test('klucz i brak konfiguracji', async () => {

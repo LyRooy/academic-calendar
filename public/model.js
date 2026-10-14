@@ -12,6 +12,8 @@ export const LIMITS = {
   room: 120,
   teacher: 120,
   notes: 2000,
+  specialDays: 500,
+  dayLabel: 120,
 };
 
 const MIN_DATE = '2000-01-01';
@@ -21,11 +23,15 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ID_PATTERN = /^[a-zA-Z0-9_-]{1,80}$/;
 const COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
+const DAY_OF_WEEK_PATTERN = /^(mon|tue|wed|thu|fri|sat|sun)$/;
 
 export const emptyPlan = () => ({
   schemaVersion: SCHEMA_VERSION,
   subjects: [],
   events: [],
+  academicYear: {
+    specialDays: [], // { date: 'YYYY-MM-DD', type: 'holiday'|'swap', label: '...', targetDay?: 'mon'|'tue'|... }
+  },
 });
 
 /** Sprawdza, czy tekst to istniejąca data w formacie RRRR-MM-DD (np. odrzuca 2026-02-31). */
@@ -122,6 +128,16 @@ function isValidEvent(event, knownIds, subjectIds) {
   );
 }
 
+function isValidSpecialDay(sd, knownDates) {
+  if (!sd || !validDate(sd.date) || knownDates.has(sd.date)) return false;
+  if (!['holiday', 'swap'].includes(sd.type)) return false;
+  if (!isText(sd.label, LIMITS.dayLabel)) return false;
+  if (sd.type === 'swap') {
+    if (!sd.targetDay || !DAY_OF_WEEK_PATTERN.test(sd.targetDay)) return false;
+  }
+  return true;
+}
+
 /** Rzuca błąd, jeśli plan ma nieprawidłową strukturę. Zwraca ten sam obiekt. */
 export function validatePlan(plan) {
   if (
@@ -133,6 +149,25 @@ export function validatePlan(plan) {
     plan.events.length > LIMITS.events
   ) {
     throw Error(`Nieprawidłowy format planu (schemaVersion: ${SCHEMA_VERSION}).`);
+  }
+
+  // Sprawdzenie academicYear (opcjonalne wstecznie dla starszych planów, inicjalizowane jeśli brak)
+  if (plan.academicYear !== undefined) {
+    if (typeof plan.academicYear !== 'object' || plan.academicYear === null || !Array.isArray(plan.academicYear.specialDays)) {
+      throw Error('Nieprawidłowy format struktury roku akademickiego.');
+    }
+    if (plan.academicYear.specialDays.length > LIMITS.specialDays) {
+      throw Error(`Zbyt wiele dni specjalnych w strukturze roku (maks. ${LIMITS.specialDays}).`);
+    }
+    const specialDates = new Set();
+    for (const sd of plan.academicYear.specialDays) {
+      if (!isValidSpecialDay(sd, specialDates)) {
+        throw Error('Nieprawidłowy wpis dnia specjalnego w strukturze roku.');
+      }
+      specialDates.add(sd.date);
+    }
+  } else {
+    plan.academicYear = { specialDays: [] };
   }
 
   const subjectIds = new Set();

@@ -289,10 +289,17 @@ textarea:focus-visible {
   border: 1px solid var(--line);
   border-radius: 13px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .day.today {
   border-color: var(--today-border);
+}
+
+.day.holiday {
+  background: var(--event-bg);
+  opacity: 0.95;
 }
 
 .dayhead {
@@ -300,12 +307,26 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 5px;
-  padding: 15px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.15s ease;
+  user-select: none;
+}
+
+.dayhead:hover {
+  background: var(--soft);
 }
 
 .today .dayhead {
   background: var(--soft);
+}
+
+.dayhead-info {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .dayhead span {
@@ -316,19 +337,74 @@ textarea:focus-visible {
 }
 
 .dayhead strong {
-  font-size: 23px;
+  font-size: 20px;
   font-weight: 500;
+}
+
+.dayhead-add {
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 6px;
+  opacity: 0.7;
+}
+
+.dayhead:hover .dayhead-add {
+  opacity: 1;
+}
+
+/* Wskaźnik dnia specjalnego w nagłówku kolumny */
+.special-day-badge {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 5px 12px;
+  border-bottom: 1px dashed var(--line);
+  line-height: 1.4;
+}
+
+.special-day-badge.holiday {
+  background: #ffdede22;
+  color: var(--danger);
+  border-bottom-color: var(--danger);
+}
+
+.special-day-badge.swap {
+  background: #ceaa6522;
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
 .events {
   padding: 9px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
-.empty {
-  font-size: 12px;
-  text-align: center;
+.day-empty-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex: 1;
+  min-height: 80px;
+  border: 1px dashed var(--line);
+  background: transparent;
   color: var(--faint);
-  padding: 36px 0;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 14px 8px;
+  transition: all 0.15s ease;
+}
+
+.day-empty-btn:hover {
+  background: var(--soft);
+  color: var(--control-text);
+  border-style: solid;
 }
 
 /* Pojedyncze zajęcia — kolor paska ustawiany z JS przez --event-color */
@@ -464,6 +540,73 @@ textarea {
 .subjectrow button {
   padding: 7px 9px;
   font-size: 12px;
+}
+
+/* Lista dni w strukturze roku */
+.dialog-subhead {
+  font-size: 15px;
+  margin: 18px 0 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 15px;
+}
+
+.specialdayrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--soft);
+  margin-bottom: 8px;
+}
+
+.specialdayrow-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.specialdayrow-date {
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.specialdayrow-desc {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.specialdayrow button {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.badge.holiday {
+  background: #ffdede33;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.badge.swap {
+  background: #ceaa6533;
+  color: var(--accent);
+  border: 1px solid var(--accent);
 }
 
 /* ==========================================================================

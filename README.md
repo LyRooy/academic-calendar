@@ -13,6 +13,9 @@ Backend: JavaScript uruchamiany jako Cloudflare Worker. Jeden prywatny obiekt `p
 - Wszystkie terminy są konkretnymi datami. Przerwy można uzyskać przez wskazanie dat lub usunięcie pojedynczych spotkań.
 - Przy zmianie daty całej pozostałej serii każde spotkanie przesuwa się o ten sam odstęp.
 - Ostrzeżenie o nakładających się zajęciach.
+- **Klikalny dzień**: kliknięcie w nagłówek dnia lub pusty dzień od razu otwiera formularz z ustawioną tą datą.
+- **Struktura roku akademickiego**: obsługa świąt/dni rektorskich oraz dni z planem zajęć według innego dnia tygodnia (np. środa realizowana według planu piątkowego).
+- **Tryb ciemny**: przełącznik Auto (zgodnie z motywem systemu) / Jasny / Ciemny, bez błysku jasnego tła przy ładowaniu.
 - Lokalny zapis w localStorage, import/eksport własnego formatu JSON.
 - Ręczna synchronizacja przyciskami „Pobierz z chmury” / „Zapisz w chmurze”.
 - Warunkowy zapis R2 (ETag) chroni przed nadpisaniem planu przez starszą kopię z innego urządzenia.

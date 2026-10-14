@@ -109,6 +109,18 @@ function mutate(change) {
   reportState();
 }
 
+// Mapowanie dni tygodnia na klucze
+const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const DAY_KEY_NAMES = {
+  mon: 'poniedziałku',
+  tue: 'wtorku',
+  wed: 'środy',
+  thu: 'czwartku',
+  fri: 'piątku',
+  sat: 'soboty',
+  sun: 'niedzieli',
+};
+
 // --- Widok tygodnia ----------------------------------------------------------
 
 function render() {
@@ -121,20 +133,58 @@ function render() {
   $('summary').textContent =
     `Liczba spotkań: ${events.length} · Łącznie: ${Math.floor(minutes / 60)} godz. ${minutes % 60} min`;
 
+  const specialDays = state.plan.academicYear?.specialDays || [];
+  const specialDayMap = new Map(specialDays.map((sd) => [sd.date, sd]));
+
   const calendar = $('calendar');
   calendar.replaceChildren();
   for (let i = 0; i < 7; i++) {
     const date = addDays(week, i);
-    calendar.append(renderDay(date, DAY_NAMES[i], events));
+    calendar.append(renderDay(date, DAY_NAMES[i], events, specialDayMap.get(date)));
   }
 }
 
-function renderDay(date, dayName, weekEvents) {
-  const day = node('section', date === today() ? 'day today' : 'day');
+function renderDay(date, dayName, weekEvents, specialDay) {
+  const isHoliday = specialDay?.type === 'holiday';
+  const isSwap = specialDay?.type === 'swap';
 
+  let dayClass = 'day';
+  if (date === today()) dayClass += ' today';
+  if (isHoliday) dayClass += ' holiday';
+
+  const day = node('section', dayClass);
+
+  // Nagłówek dnia jest klikalny — pozwala błyskawicznie dodać zajęcia dla tego dnia
   const head = node('div', 'dayhead');
-  head.append(node('span', '', dayName), node('strong', '', date.slice(8)));
+  head.title = `Kliknij, aby dodać zajęcia w dniu ${date} (${dayName})`;
+  head.onclick = (e) => {
+    // Nie otwieraj, jeśli kliknięto w coś innego
+    openEventDialog(null, date);
+  };
+
+  const headInfo = node('div', 'dayhead-info');
+  headInfo.append(node('span', '', dayName), node('strong', '', date.slice(8)));
+
+  const addHint = node('span', 'dayhead-add', '+');
+  addHint.title = 'Dodaj zajęcia w tym dniu';
+  head.append(headInfo, addHint);
   day.append(head);
+
+  // Oznaczenie dnia specjalnego (święto lub plan z innego dnia)
+  if (specialDay) {
+    let badgeText = '';
+    if (isHoliday) {
+      badgeText = `🏖 ${specialDay.label || 'Dzień wolny'}`;
+    } else if (isSwap) {
+      const targetName = DAY_KEY_NAMES[specialDay.targetDay] || specialDay.targetDay;
+      const labelSuffix = specialDay.label ? ` · ${specialDay.label}` : '';
+      badgeText = `🔄 Plan z ${targetName}${labelSuffix}`;
+    }
+    const badge = node('div', `special-day-badge ${specialDay.type}`, badgeText);
+    badge.onclick = () => openAcademicYearDialog();
+    badge.title = 'Kliknij, aby edytować strukturę roku';
+    day.append(badge);
+  }
 
   const list = node('div', 'events');
   const dayEvents = weekEvents
@@ -142,7 +192,13 @@ function renderDay(date, dayName, weekEvents) {
     .sort((a, b) => a.start.localeCompare(b.start));
 
   for (const event of dayEvents) list.append(renderEvent(event, dayEvents));
-  if (!dayEvents.length) list.append(node('p', 'empty', 'Bez zajęć'));
+
+  if (!dayEvents.length) {
+    const emptyBtn = node('button', 'day-empty-btn', isHoliday ? 'Dzień wolny od zajęć (+)' : '+ Dodaj zajęcia');
+    emptyBtn.type = 'button';
+    emptyBtn.onclick = () => openEventDialog(null, date);
+    list.append(emptyBtn);
+  }
 
   day.append(list);
   return day;
@@ -258,7 +314,7 @@ function saveSubject(event) {
 
 const EVENT_FIELDS = ['type', 'start', 'end', 'room', 'teacher', 'notes'];
 
-function openEventDialog(id) {
+function openEventDialog(id, initialDate = null) {
   if (busy) return;
 
   if (!state.plan.subjects.length) {
@@ -290,7 +346,7 @@ function openEventDialog(id) {
 
   const t = today();
   const todayInWeek = t >= week && t <= addDays(week, 6);
-  $('date').value = event?.date || (todayInWeek ? t : week);
+  $('date').value = event?.date || initialDate || (todayInWeek ? t : week);
 
   if (event) {
     for (const field of EVENT_FIELDS) $(field).value = event[field];
@@ -371,6 +427,108 @@ function deleteEvent() {
     $('eventDialog').close();
   } catch (err) {
     $('eventError').textContent = err.message;
+  }
+}
+
+// --- Struktura roku akademickiego ------------------------------------------
+
+function renderSpecialDaysList() {
+  const container = $('specialDayList');
+  container.replaceChildren();
+
+  const specialDays = [...(state.plan.academicYear?.specialDays || [])].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
+
+  if (!specialDays.length) {
+    container.append(
+      node('p', 'hint', 'Brak zdefiniowanych dni wolnych i zamian planu. Dodaj je poniżej.'),
+    );
+    return;
+  }
+
+  for (const sd of specialDays) {
+    const row = node('div', 'specialdayrow');
+    const info = node('div', 'specialdayrow-info');
+
+    const dateLine = node('div', 'specialdayrow-date');
+    const badge = node('span', `badge ${sd.type}`, sd.type === 'holiday' ? 'Wolne' : 'Zamiana');
+    dateLine.append(node('span', '', sd.date), badge);
+
+    let descText = sd.label || '';
+    if (sd.type === 'swap') {
+      const targetName = DAY_KEY_NAMES[sd.targetDay] || sd.targetDay;
+      const swapDesc = `Zajęcia według planu z ${targetName}`;
+      descText = descText ? `${swapDesc} (${descText})` : swapDesc;
+    }
+    const desc = node('div', 'specialdayrow-desc', descText);
+
+    info.append(dateLine, desc);
+
+    const deleteBtn = node('button', 'danger', 'Usuń');
+    deleteBtn.type = 'button';
+    deleteBtn.onclick = () => deleteSpecialDay(sd.date);
+
+    row.append(info, deleteBtn);
+    container.append(row);
+  }
+}
+
+function openAcademicYearDialog() {
+  renderSpecialDaysList();
+  $('academicYearError').textContent = '';
+  $('specialDayDate').value = today();
+  $('specialDayLabel').value = '';
+  $('specialDayType').value = 'holiday';
+  updateSpecialDayTypeFields();
+  $('academicYearDialog').showModal();
+}
+
+function updateSpecialDayTypeFields() {
+  const isSwap = $('specialDayType').value === 'swap';
+  $('swapTargetContainer').hidden = !isSwap;
+}
+
+function deleteSpecialDay(date) {
+  try {
+    mutate((plan) => {
+      if (!plan.academicYear) plan.academicYear = { specialDays: [] };
+      plan.academicYear.specialDays = plan.academicYear.specialDays.filter((sd) => sd.date !== date);
+    });
+    renderSpecialDaysList();
+  } catch (err) {
+    $('academicYearError').textContent = err.message;
+  }
+}
+
+function saveSpecialDay(event) {
+  event.preventDefault();
+  try {
+    const date = $('specialDayDate').value;
+    const type = $('specialDayType').value;
+    const label = $('specialDayLabel').value.trim();
+    const targetDay = type === 'swap' ? $('specialDayTargetDay').value : undefined;
+
+    mutate((plan) => {
+      if (!plan.academicYear) plan.academicYear = { specialDays: [] };
+
+      // Sprawdź duplikat daty
+      const existing = plan.academicYear.specialDays.find((sd) => sd.date === date);
+      if (existing) {
+        throw Error(`Dla dnia ${date} już istnieje wpis w strukturze roku. Najpierw go usuń.`);
+      }
+
+      const item = { date, type, label };
+      if (type === 'swap') item.targetDay = targetDay;
+
+      plan.academicYear.specialDays.push(item);
+    });
+
+    $('specialDayLabel').value = '';
+    $('academicYearError').textContent = '';
+    renderSpecialDaysList();
+  } catch (err) {
+    $('academicYearError').textContent = err.message;
   }
 }
 
@@ -527,6 +685,10 @@ function bindEvents() {
   $('subjects').onclick = () => openSubjectDialog();
   $('subjectForm').onsubmit = saveSubject;
   $('newSubject').onclick = resetSubjectForm;
+
+  $('academicYearBtn').onclick = () => openAcademicYearDialog();
+  $('academicYearForm').onsubmit = saveSpecialDay;
+  $('specialDayType').onchange = updateSpecialDayTypeFields;
 
   for (const button of document.querySelectorAll('[data-close]')) {
     button.onclick = () => button.closest('dialog').close();
