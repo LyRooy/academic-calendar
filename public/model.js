@@ -57,14 +57,25 @@ export function monday(date) {
   return addDays(date, -daysSinceMonday);
 }
 
+/** Zwraca klucz dnia tygodnia ('mon'..'sun') dla podanej daty. */
+export function getDayOfWeekKey(date) {
+  const weekday = new Date(date + 'T12:00:00Z').getUTCDay();
+  const keys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  return keys[weekday];
+}
+
 /**
- * Generuje listę dat spotkań.
+ * Generuje listę dat spotkań, opcjonalnie uwzględniając strukturę roku akademickiego
+ * (omija święta/przerwy i automatycznie dodaje dni, w których odbywa się plan z tego dnia tygodnia).
+ *
  * @param {string} start  pierwsza data (RRRR-MM-DD)
  * @param {string} until  ostatnia możliwa data serii (dla weekly/biweekly)
  * @param {'once'|'weekly'|'biweekly'|'manual'} mode  tryb powtarzania
  * @param {string} manual lista dat oddzielonych przecinkami/spacjami (dla trybu manual)
+ * @param {object} [academicYear] struktura roku z tablicą specialDays
+ * @param {boolean} [applyAcademicYear=true] czy stosować reguły świąt i zamian
  */
-export function datesFor(start, until, mode, manual = '') {
+export function datesFor(start, until, mode, manual = '', academicYear = null, applyAcademicYear = true) {
   if (!validDate(start)) throw Error('Wybierz prawidłową datę.');
 
   if (mode === 'once') return [start];
@@ -81,15 +92,49 @@ export function datesFor(start, until, mode, manual = '') {
     throw Error('Podaj datę końca serii nie wcześniejszą niż początek.');
   }
 
+  const specialDays = (applyAcademicYear && academicYear?.specialDays) || [];
+  const holidays = new Set(specialDays.filter((sd) => sd.type === 'holiday').map((sd) => sd.date));
+  const swaps = specialDays.filter((sd) => sd.type === 'swap');
+
+  // Klucz dnia tygodnia wybranego spotkania (np. 'wed' dla środy)
+  const targetDayKey = getDayOfWeekKey(start);
+
   const step = mode === 'weekly' ? 7 : 14;
-  const result = [];
+  const rawDates = [];
   for (let date = start; date <= until; date = addDays(date, step)) {
-    if (result.length >= LIMITS.eventsPerSeries) {
+    if (rawDates.length >= LIMITS.eventsPerSeries) {
       throw Error(`Maksymalnie ${LIMITS.eventsPerSeries} spotkań w jednej serii.`);
     }
-    result.push(date);
+    // 1. Omiń dni wolne (święta, przerwy świąteczne)
+    if (holidays.has(date)) continue;
+
+    // 2. Omiń dni, w których odbywają się zajęcia z INNEGO dnia (np. środa z planem piątkowym nie ma zajęć środowych)
+    const swapForThisDate = swaps.find((sd) => sd.date === date);
+    if (swapForThisDate && swapForThisDate.targetDay !== targetDayKey) {
+      continue;
+    }
+
+    rawDates.push(date);
   }
-  return result;
+
+  // 3. Dodaj dni z zamianą planu na ten dzień tygodnia w zadanym przedziale czasowym
+  // (np. jeśli powtarzamy zajęcia ze środy, a wtorek 10 listopada ma plan ze środy, dodaj ten wtorek!)
+  if (mode === 'weekly') {
+    for (const swap of swaps) {
+      if (swap.targetDay === targetDayKey && swap.date >= start && swap.date <= until) {
+        if (!holidays.has(swap.date) && !rawDates.includes(swap.date)) {
+          rawDates.push(swap.date);
+        }
+      }
+    }
+  }
+
+  rawDates.sort();
+  if (rawDates.length > LIMITS.eventsPerSeries) {
+    throw Error(`Maksymalnie ${LIMITS.eventsPerSeries} spotkań w jednej serii.`);
+  }
+
+  return rawDates;
 }
 
 // --- Walidacja całego planu ---------------------------------------------------

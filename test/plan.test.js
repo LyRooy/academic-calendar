@@ -136,6 +136,23 @@ test('walidacja struktury roku akademickiego', () => {
   assert.throws(() => validatePlan(badSwap));
 });
 
+test('datesFor respektuje święta, przerwy i dni z zamianą planu', () => {
+  // 2026-10-14 to środa
+  // 2026-10-21 (środa) - wolne (święto/przerwa)
+  // 2026-10-27 (wtorek) - zamiana: plan ze środy!
+  // 2026-10-28 (środa) - normalna środa
+  const academicYear = {
+    specialDays: [
+      { date: '2026-10-21', type: 'holiday', label: 'Przerwa' },
+      { date: '2026-10-27', type: 'swap', label: 'Środa z wtorku', targetDay: 'wed' },
+    ],
+  };
+
+  const dates = datesFor('2026-10-14', '2026-10-28', 'weekly', '', academicYear, true);
+  // Powinny być: 14 (środa), 27 (wtorek jako środa), 28 (środa). 21 powinno zostać ominięte!
+  assert.deepEqual(dates, ['2026-10-14', '2026-10-27', '2026-10-28']);
+});
+
 // --- API -----------------------------------------------------------------------
 
 test('klucz i brak konfiguracji', async () => {

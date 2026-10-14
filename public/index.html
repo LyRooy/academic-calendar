@@ -93,6 +93,10 @@
               <option>Projekt</option>
               <option>Ćwiczenia</option>
               <option>Seminarium</option>
+              <option>Odrabianie zajęć</option>
+              <option>Konsultacje</option>
+              <option>Egzamin / Kolokwium</option>
+              <option>Spotkanie koła naukowego</option>
             </datalist>
           </label>
           <label>
@@ -145,16 +149,20 @@
             <textarea id="manual" placeholder="2026-10-14, 2026-11-25, 2026-12-09"></textarea>
             <small>Ta lista zastępuje datę powyżej.</small>
           </label>
+          <label id="applyAcademicYearLabel" class="checkbox-row" hidden>
+            <input type="checkbox" id="applyAcademicYear" checked>
+            <span>Dopasuj do struktury roku (pomiń dni wolne/przerwy i uwzględnij zamiany planu)</span>
+          </label>
         </div>
 
         <!-- Widoczne tylko przy edycji istniejących zajęć -->
         <label id="scopeLabel" hidden>
-          Zakres zmiany / usunięcia
+          Zakres wprowadzanych zmian lub usuwania:
           <select id="scope">
-            <option value="one">Tylko to spotkanie</option>
-            <option value="future">To i kolejne spotkania tej serii</option>
+            <option value="one">Tylko to jedno wybrane spotkanie</option>
+            <option value="future">To i wszystkie kolejne spotkania tej serii</option>
           </select>
-          <small>Zmiana daty przesuwa kolejne spotkania o tyle samo dni.</small>
+          <small id="scopeHelp">Wybierz „Tylko to jedno spotkanie”, jeśli chcesz usunąć odwołane zajęcia lub zmienić salę/godzinę tylko w tym jednym dniu.</small>
         </label>
 
         <label>

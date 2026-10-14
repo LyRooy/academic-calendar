@@ -365,6 +365,7 @@ function updateRepeatFields() {
   $('untilLabel').hidden = !repeating;
   $('until').required = repeating;
   $('manualLabel').hidden = mode !== 'manual';
+  $('applyAcademicYearLabel').hidden = !repeating;
 }
 
 function readEventForm() {
@@ -394,6 +395,8 @@ function saveEvent(submitEvent) {
       throw Error('Godzina zakończenia musi być późniejsza niż rozpoczęcia.');
     }
 
+    const applyAcademicYear = $('applyAcademicYear').checked;
+
     mutate((plan) => {
       if (editingId) {
         const original = plan.events.find((e) => e.id === editingId);
@@ -406,7 +409,14 @@ function saveEvent(submitEvent) {
         );
       } else {
         const seriesId = uid();
-        const dates = datesFor(values.date, $('until').value, $('repeat').value, $('manual').value);
+        const dates = datesFor(
+          values.date,
+          $('until').value,
+          $('repeat').value,
+          $('manual').value,
+          plan.academicYear,
+          applyAcademicYear,
+        );
         for (const date of dates) {
           plan.events.push({ ...values, date, id: uid(), seriesId });
         }
@@ -420,7 +430,13 @@ function saveEvent(submitEvent) {
 }
 
 function deleteEvent() {
-  if (!confirm('Usunąć zajęcia zgodnie z wybranym zakresem?')) return;
+  const isSingle = $('scope').value === 'one';
+  const confirmMsg = isSingle
+    ? 'Czy na pewno usunąć tylko to jedno spotkanie z planu?'
+    : 'Czy na pewno usunąć to i wszystkie kolejne spotkania tej serii?';
+
+  if (!confirm(confirmMsg)) return;
+
   try {
     mutate((plan) => {
       const original = plan.events.find((e) => e.id === editingId);
