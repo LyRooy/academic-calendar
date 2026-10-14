@@ -1,22 +1,73 @@
 /* ==========================================================================
    Zmienne i podstawy
+   Motyw ustawia theme.js przez atrybut <html data-theme="light|dark">.
    ========================================================================== */
 
+/* Motyw jasny (domyślny) */
 :root {
+  color-scheme: light;
+
+  --bg: #f5f5ef;
+  --text: #203c35;
+  --muted: #68776f;
+  --faint: #87958b;
+  --surface: #fffefa;
+  --soft: #e8eee3;
+  --line: #dce3da;
+
+  --control: #ffffff;
+  --control-hover: #eaf0e8;
+  --control-text: #163d36;
+
   --green: #163d36;
   --green-hover: #28594c;
-  --line: #dce3da;
+  --on-green: #ffffff;
   --accent: #d08b43;
   --focus: #ceaa65;
   --danger: #ab3434;
-  --muted: #718078;
-  --surface: #fffefa;
-  --soft: #e8eee3;
+
+  --event-bg: #f6f8f2;
+  --event-border: #dfe5db;
+  --today-border: #5a8d70;
+
+  --shadow: #12382725;
+  --backdrop: #0b231c66;
 
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 15px;
-  color: #203c35;
-  background: #f5f5ef;
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* Motyw ciemny */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0f1715;
+  --text: #e2ebe6;
+  --muted: #9db0a6;
+  --faint: #73867c;
+  --surface: #16211e;
+  --soft: #1e2d29;
+  --line: #2b3b36;
+
+  --control: #1b2925;
+  --control-hover: #243632;
+  --control-text: #cfe6dc;
+
+  --green: #2f7a68;
+  --green-hover: #3a8d79;
+  --on-green: #ffffff;
+  --accent: #e0a15e;
+  --focus: #d9b46e;
+  --danger: #f08a8a;
+
+  --event-bg: #1b2724;
+  --event-border: #2b3b36;
+  --today-border: #4f9a7a;
+
+  --shadow: #00000080;
+  --backdrop: #000000aa;
 }
 
 * {
@@ -51,7 +102,7 @@ header {
 }
 
 header p {
-  color: #66756d;
+  color: var(--muted);
   margin: 0;
 }
 
@@ -83,7 +134,7 @@ p {
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 2px;
-  color: #63796e;
+  color: var(--muted);
 }
 
 .hint,
@@ -133,8 +184,8 @@ button {
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  color: var(--green);
-  background: white;
+  color: var(--control-text);
+  background: var(--control);
   border: 1px solid var(--line);
   border-radius: 9px;
   padding: 11px 15px;
@@ -142,7 +193,7 @@ button {
 }
 
 button:hover {
-  background: #eaf0e8;
+  background: var(--control-hover);
 }
 
 button:disabled {
@@ -160,7 +211,7 @@ textarea:focus-visible {
 
 .primary {
   background: var(--green);
-  color: white;
+  color: var(--on-green);
   border-color: var(--green);
 }
 
@@ -207,13 +258,13 @@ textarea:focus-visible {
 
 .weekbar p {
   font-size: 13px;
-  color: #68776f;
+  color: var(--muted);
   margin: 0;
 }
 
 .datejump {
   font-size: 10px;
-  color: #65776d;
+  color: var(--muted);
   gap: 2px;
   margin: 0;
 }
@@ -241,7 +292,7 @@ textarea:focus-visible {
 }
 
 .day.today {
-  border-color: #5a8d70;
+  border-color: var(--today-border);
 }
 
 .dayhead {
@@ -261,7 +312,7 @@ textarea:focus-visible {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: #6c7d70;
+  color: var(--muted);
 }
 
 .dayhead strong {
@@ -276,7 +327,7 @@ textarea:focus-visible {
 .empty {
   font-size: 12px;
   text-align: center;
-  color: #87958b;
+  color: var(--faint);
   padding: 36px 0;
 }
 
@@ -285,11 +336,11 @@ textarea:focus-visible {
   display: block;
   width: 100%;
   text-align: left;
-  border: 1px solid #dfe5db;
+  border: 1px solid var(--event-border);
   border-left: 4px solid var(--event-color);
   padding: 12px 9px;
   margin-bottom: 9px;
-  background: #f6f8f2;
+  background: var(--event-bg);
   overflow-wrap: anywhere;
 }
 
@@ -312,7 +363,7 @@ textarea:focus-visible {
   text-transform: uppercase;
   letter-spacing: 0.4px;
   margin-top: 8px;
-  color: #687c6e;
+  color: var(--muted);
 }
 
 .event .meta {
@@ -320,7 +371,7 @@ textarea:focus-visible {
   font-size: 11px;
   font-weight: 400;
   margin-top: 6px;
-  color: #627568;
+  color: var(--muted);
 }
 
 /* ==========================================================================
@@ -329,16 +380,17 @@ textarea:focus-visible {
 
 dialog {
   color: inherit;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 25px;
   width: min(540px, calc(100% - 24px));
   max-height: 90vh;
-  box-shadow: 0 22px 80px #12382725;
+  box-shadow: 0 22px 80px var(--shadow);
 }
 
 dialog::backdrop {
-  background: #0b231c66;
+  background: var(--backdrop);
   backdrop-filter: blur(3px);
 }
 
@@ -376,7 +428,7 @@ textarea {
   font: inherit;
   font-size: 14px;
   color: inherit;
-  background: white;
+  background: var(--control);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 11px;
@@ -447,7 +499,13 @@ textarea {
     font-size: 12px;
   }
 
-  header > .primary {
+  .header-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .header-actions button {
     font-size: 12px;
     white-space: nowrap;
     padding: 10px;
