@@ -474,26 +474,134 @@ function renderSpecialDaysList() {
   }
 }
 
+// --- Struktura roku akademickiego ------------------------------------------
+
+function groupSpecialDays(specialDays) {
+  const sorted = [...specialDays].sort((a, b) => a.date.localeCompare(b.date));
+  const groups = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    const current = sorted[i];
+
+    if (current.type === 'holiday') {
+      let j = i;
+      while (
+        j + 1 < sorted.length &&
+        sorted[j + 1].type === 'holiday' &&
+        (sorted[j + 1].label || '') === (current.label || '') &&
+        sorted[j + 1].date === addDays(sorted[j].date, 1)
+      ) {
+        j++;
+      }
+
+      if (j > i) {
+        groups.push({
+          type: 'holiday',
+          label: current.label,
+          startDate: current.date,
+          endDate: sorted[j].date,
+          count: j - i + 1,
+          dates: sorted.slice(i, j + 1).map((x) => x.date),
+        });
+        i = j;
+        continue;
+      }
+    }
+
+    groups.push({
+      type: current.type,
+      label: current.label,
+      targetDay: current.targetDay,
+      startDate: current.date,
+      endDate: current.date,
+      count: 1,
+      dates: [current.date],
+    });
+  }
+
+  return groups;
+}
+
+function renderSpecialDaysList() {
+  const container = $('specialDayList');
+  container.replaceChildren();
+
+  const specialDays = state.plan.academicYear?.specialDays || [];
+
+  if (!specialDays.length) {
+    container.append(
+      node('p', 'hint', 'Brak zdefiniowanych dni wolnych i przerw świątecznych. Dodaj je poniżej.'),
+    );
+    return;
+  }
+
+  const groups = groupSpecialDays(specialDays);
+
+  for (const group of groups) {
+    const row = node('div', 'specialdayrow');
+    const info = node('div', 'specialdayrow-info');
+
+    const dateLine = node('div', 'specialdayrow-date');
+    const isRange = group.count > 1;
+    const badgeText = group.type === 'holiday' ? (isRange ? `Przerwa (${group.count} dni)` : 'Wolne') : 'Zamiana';
+    const badge = node('span', `badge ${group.type}`, badgeText);
+
+    const dateRangeStr = isRange ? `${group.startDate} → ${group.endDate}` : group.startDate;
+    dateLine.append(node('span', '', dateRangeStr), badge);
+
+    let descText = group.label || (group.type === 'holiday' ? (isRange ? 'Przerwa świąteczna / wolna' : 'Dzień wolny') : '');
+    if (group.type === 'swap') {
+      const targetName = DAY_KEY_NAMES[group.targetDay] || group.targetDay;
+      const swapDesc = `Zajęcia według planu z ${targetName}`;
+      descText = descText ? `${swapDesc} (${descText})` : swapDesc;
+    }
+    const desc = node('div', 'specialdayrow-desc', descText);
+
+    info.append(dateLine, desc);
+
+    const deleteBtn = node('button', 'danger', 'Usuń');
+    deleteBtn.type = 'button';
+    deleteBtn.onclick = () => deleteSpecialDays(group.dates);
+
+    row.append(info, deleteBtn);
+    container.append(row);
+  }
+}
+
 function openAcademicYearDialog() {
   renderSpecialDaysList();
   $('academicYearError').textContent = '';
   $('specialDayDate').value = today();
+  $('specialDayDateEnd').value = addDays(today(), 7);
   $('specialDayLabel').value = '';
-  $('specialDayType').value = 'holiday';
+  $('specialDayType').value = 'holiday_range';
   updateSpecialDayTypeFields();
   $('academicYearDialog').showModal();
 }
 
 function updateSpecialDayTypeFields() {
-  const isSwap = $('specialDayType').value === 'swap';
+  const type = $('specialDayType').value;
+  const isSwap = type === 'swap';
+  const isRange = type === 'holiday_range';
+
   $('swapTargetContainer').hidden = !isSwap;
+  $('dateEndContainer').hidden = !isRange;
+  $('specialDayDateEnd').required = isRange;
+
+  const dateLabel = $('specialDayDateLabel');
+  if (isRange) {
+    dateLabel.childNodes[0].textContent = 'Data od: ';
+  } else {
+    dateLabel.childNodes[0].textContent = 'Data: ';
+  }
 }
 
-function deleteSpecialDay(date) {
+function deleteSpecialDays(datesToDelete) {
   try {
+    const toRemove = new Set(datesToDelete);
     mutate((plan) => {
       if (!plan.academicYear) plan.academicYear = { specialDays: [] };
-      plan.academicYear.specialDays = plan.academicYear.specialDays.filter((sd) => sd.date !== date);
+      plan.academicYear.specialDays = plan.academicYear.specialDays.filter((sd) => !toRemove.has(sd.date));
     });
     renderSpecialDaysList();
   } catch (err) {
@@ -504,24 +612,44 @@ function deleteSpecialDay(date) {
 function saveSpecialDay(event) {
   event.preventDefault();
   try {
-    const date = $('specialDayDate').value;
     const type = $('specialDayType').value;
+    const startDate = $('specialDayDate').value;
+    const endDate = $('specialDayDateEnd').value;
     const label = $('specialDayLabel').value.trim();
     const targetDay = type === 'swap' ? $('specialDayTargetDay').value : undefined;
+
+    const datesToAdd = [];
+
+    if (type === 'holiday_range') {
+      if (!endDate || endDate < startDate) {
+        throw Error('Data końcowa przerwy musi być późniejsza lub równa dacie początkowej.');
+      }
+      for (let cur = startDate; cur <= endDate; cur = addDays(cur, 1)) {
+        if (datesToAdd.length >= 366) {
+          throw Error('Przerwa nie może trwać dłużej niż 366 dni.');
+        }
+        datesToAdd.push(cur);
+      }
+    } else {
+      datesToAdd.push(startDate);
+    }
 
     mutate((plan) => {
       if (!plan.academicYear) plan.academicYear = { specialDays: [] };
 
-      // Sprawdź duplikat daty
-      const existing = plan.academicYear.specialDays.find((sd) => sd.date === date);
-      if (existing) {
-        throw Error(`Dla dnia ${date} już istnieje wpis w strukturze roku. Najpierw go usuń.`);
+      // Sprawdź, czy któryś dzień nie jest już zajęty
+      const existingMap = new Map(plan.academicYear.specialDays.map((sd) => [sd.date, sd]));
+      for (const d of datesToAdd) {
+        if (existingMap.has(d)) {
+          throw Error(`Dla dnia ${d} już istnieje wpis w strukturze roku. Najpierw go usuń.`);
+        }
       }
 
-      const item = { date, type, label };
-      if (type === 'swap') item.targetDay = targetDay;
-
-      plan.academicYear.specialDays.push(item);
+      for (const d of datesToAdd) {
+        const item = { date: d, type: type === 'swap' ? 'swap' : 'holiday', label };
+        if (type === 'swap') item.targetDay = targetDay;
+        plan.academicYear.specialDays.push(item);
+      }
     });
 
     $('specialDayLabel').value = '';

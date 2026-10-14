@@ -239,18 +239,26 @@
 
         <div id="specialDayList"></div>
 
-        <h3 class="dialog-subhead">Dodaj dzień specjalny</h3>
+        <h3 class="dialog-subhead">Dodaj dzień lub przerwę świąteczną</h3>
         <div class="pair">
           <label>
-            Data
+            Typ
+            <select id="specialDayType">
+              <option value="holiday_range">Przerwa świąteczna / okres wolny (od – do)</option>
+              <option value="holiday">Pojedynczy dzień wolny (święto / rektorski)</option>
+              <option value="swap">Zajęcia według innego dnia tygodnia</option>
+            </select>
+          </label>
+          <label id="specialDayDateLabel">
+            Data (od)
             <input id="specialDayDate" type="date" required min="2000-01-01" max="2100-12-31">
           </label>
+        </div>
+
+        <div id="dateEndContainer">
           <label>
-            Typ dnia
-            <select id="specialDayType">
-              <option value="holiday">Dzień wolny (święto / rektorski)</option>
-              <option value="swap">Zajęcia według innego dnia</option>
-            </select>
+            Data do (włącznie)
+            <input id="specialDayDateEnd" type="date" min="2000-01-01" max="2100-12-31">
           </label>
         </div>
 
