@@ -1,0 +1,518 @@
+/* ==========================================================================
+   Zmienne i podstawy
+   ========================================================================== */
+
+:root {
+  --green: #163d36;
+  --green-hover: #28594c;
+  --line: #dce3da;
+  --accent: #d08b43;
+  --focus: #ceaa65;
+  --danger: #ab3434;
+  --muted: #718078;
+  --surface: #fffefa;
+  --soft: #e8eee3;
+
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  color: #203c35;
+  background: #f5f5ef;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ==========================================================================
+   Nagłówek i typografia
+   ========================================================================== */
+
+header,
+main {
+  max-width: 1500px;
+  margin: auto;
+  padding: 30px 36px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 48px;
+  padding-bottom: 30px;
+}
+
+header p {
+  color: #66756d;
+  margin: 0;
+}
+
+main {
+  padding-top: 0;
+}
+
+h1 {
+  font-size: 42px;
+  letter-spacing: -2px;
+  margin: 9px 0;
+}
+
+h1 span {
+  color: var(--accent);
+}
+
+h2 {
+  margin: 8px 0;
+  font-size: 25px;
+  letter-spacing: -0.7px;
+}
+
+p {
+  line-height: 1.6;
+}
+
+.eyebrow {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #63796e;
+}
+
+.hint,
+small {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.hint {
+  margin: 15px 0;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+/* ==========================================================================
+   Układy pomocnicze
+   ========================================================================== */
+
+.actions,
+.pair,
+.dialogfoot,
+.dialoghead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pair {
+  align-items: stretch;
+}
+
+.pair > label {
+  flex: 1;
+  min-width: 130px;
+}
+
+/* ==========================================================================
+   Przyciski
+   ========================================================================== */
+
+button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 11px 15px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #eaf0e8;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.primary {
+  background: var(--green);
+  color: white;
+  border-color: var(--green);
+}
+
+.primary:hover {
+  background: var(--green-hover);
+}
+
+.danger {
+  color: var(--danger);
+}
+
+/* ==========================================================================
+   Pasek narzędzi i status
+   ========================================================================== */
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 20px;
+}
+
+.status {
+  font-size: 12px;
+  padding: 10px 14px;
+  background: var(--soft);
+  border-radius: 8px;
+  min-height: 38px;
+}
+
+/* ==========================================================================
+   Nawigacja tygodnia
+   ========================================================================== */
+
+.weekbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin: 30px 0 20px;
+}
+
+.weekbar p {
+  font-size: 13px;
+  color: #68776f;
+  margin: 0;
+}
+
+.datejump {
+  font-size: 10px;
+  color: #65776d;
+  gap: 2px;
+  margin: 0;
+}
+
+.datejump input {
+  padding: 6px 8px;
+}
+
+/* ==========================================================================
+   Kalendarz
+   ========================================================================== */
+
+.calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.day {
+  min-height: 350px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  overflow: hidden;
+}
+
+.day.today {
+  border-color: #5a8d70;
+}
+
+.dayhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  padding: 15px;
+  border-bottom: 1px solid var(--line);
+}
+
+.today .dayhead {
+  background: var(--soft);
+}
+
+.dayhead span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #6c7d70;
+}
+
+.dayhead strong {
+  font-size: 23px;
+  font-weight: 500;
+}
+
+.events {
+  padding: 9px;
+}
+
+.empty {
+  font-size: 12px;
+  text-align: center;
+  color: #87958b;
+  padding: 36px 0;
+}
+
+/* Pojedyncze zajęcia — kolor paska ustawiany z JS przez --event-color */
+.event {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid #dfe5db;
+  border-left: 4px solid var(--event-color);
+  padding: 12px 9px;
+  margin-bottom: 9px;
+  background: #f6f8f2;
+  overflow-wrap: anywhere;
+}
+
+.event .time {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 9px;
+}
+
+.event .name {
+  display: block;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.event .type {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 8px;
+  color: #687c6e;
+}
+
+.event .meta {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  margin-top: 6px;
+  color: #627568;
+}
+
+/* ==========================================================================
+   Okna dialogowe i formularze
+   ========================================================================== */
+
+dialog {
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 25px;
+  width: min(540px, calc(100% - 24px));
+  max-height: 90vh;
+  box-shadow: 0 22px 80px #12382725;
+}
+
+dialog::backdrop {
+  background: #0b231c66;
+  backdrop-filter: blur(3px);
+}
+
+.dialoghead {
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.dialoghead h2 {
+  font-size: 23px;
+}
+
+.dialoghead button {
+  font-size: 20px;
+  padding: 5px 12px;
+}
+
+.dialogfoot {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 12px 0;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  font-size: 14px;
+  color: inherit;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+  width: 100%;
+  min-width: 0;
+}
+
+input[type="color"] {
+  width: 80px;
+  height: 40px;
+  padding: 4px;
+}
+
+textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+/* Lista przedmiotów */
+.subjectrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.subjectrow span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.subjectrow button {
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+/* ==========================================================================
+   Responsywność
+   ========================================================================== */
+
+/* Tablety: 4 kolumny dni */
+@media (max-width: 1100px) {
+  .calendar {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .day {
+    min-height: 260px;
+  }
+}
+
+/* Telefony: dni jeden pod drugim */
+@media (max-width: 650px) {
+  header,
+  main {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  header {
+    padding-top: 25px;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  header p {
+    font-size: 12px;
+  }
+
+  header > .primary {
+    font-size: 12px;
+    white-space: nowrap;
+    padding: 10px;
+  }
+
+  h1 {
+    font-size: 31px;
+  }
+
+  .eyebrow {
+    font-size: 9px;
+    letter-spacing: 1px;
+  }
+
+  button {
+    padding: 10px;
+    font-size: 12px;
+  }
+
+  .toolbar .actions {
+    gap: 6px;
+  }
+
+  .status {
+    overflow-wrap: anywhere;
+  }
+
+  .weekbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .weekbar .actions {
+    width: 100%;
+  }
+
+  .datejump {
+    margin-left: auto;
+  }
+
+  .calendar {
+    grid-template-columns: 1fr;
+  }
+
+  .day {
+    min-height: 0;
+  }
+
+  .dayhead {
+    padding: 10px 15px;
+  }
+
+  .events {
+    padding: 9px 12px;
+  }
+
+  .event {
+    padding: 12px;
+  }
+
+  .empty {
+    padding: 5px;
+  }
+
+  .hint {
+    font-size: 11px;
+  }
+}

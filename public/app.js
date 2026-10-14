@@ -1,0 +1,565 @@
+// Logika interfejsu: renderowanie tygodnia, formularze, zapis lokalny (localStorage)
+// oraz ręczna synchronizacja z Workerem Cloudflare (/api/plan).
+
+import { emptyPlan, validatePlan, datesFor, addDays, monday } from './model.js';
+
+// --- Stałe i stan ------------------------------------------------------------
+
+const STORAGE_KEY = 'student-calendar-v1';
+const TOKEN_KEY = 'student-calendar-token';
+const API_URL = '/api/plan'; // ten sam adres co frontend — Worker obsługuje oba
+const API_TIMEOUT_MS = 20_000;
+const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+const MIN_TOKEN_LENGTH = 32;
+const DAY_NAMES = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Ndz'];
+
+/** state.plan – dane planu, state.etag – wersja z chmury, state.dirty – niezsynchronizowane zmiany */
+let state = { plan: emptyPlan(), etag: null, dirty: false };
+let lastStored = null;       // ostatnia wartość zapisana przez tę kartę (wykrywanie innych kart)
+let storageBlocked = false;  // localStorage niedostępny lub zmieniony przez inną kartę
+let busy = false;            // trwa synchronizacja
+let editingId = null;        // id edytowanych zajęć (null = nowe)
+let week = monday(today());  // poniedziałek wyświetlanego tygodnia
+
+// --- Narzędzia ---------------------------------------------------------------
+
+function $(id) {
+  return document.getElementById(id);
+}
+
+/** Dzisiejsza data lokalna w formacie RRRR-MM-DD. */
+function today() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+const uid = () => crypto.randomUUID();
+const clone = (value) => structuredClone(value);
+
+function node(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
+const dayMonthFormat = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'long' });
+const formatDate = (date) => dayMonthFormat.format(new Date(date + 'T12:00:00Z'));
+
+const toMinutes = (time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+
+// --- Komunikaty --------------------------------------------------------------
+
+function setStatus(message) {
+  $('status').textContent = message;
+}
+
+function reportState() {
+  if (storageBlocked) {
+    setStatus('Nie można bezpiecznie zapisać danych lokalnych. Wyeksportuj plan i sprawdź pamięć przeglądarki.');
+  } else if (state.dirty) {
+    setStatus('Masz lokalne zmiany · Zapisz w chmurze, aby udostępnić je na innych urządzeniach.');
+  } else {
+    setStatus('Plan zapisany lokalnie · Pobierz z chmury, aby sprawdzić aktualną wersję.');
+  }
+}
+
+// --- Zapis lokalny -----------------------------------------------------------
+
+function loadFromStorage() {
+  try {
+    lastStored = localStorage.getItem(STORAGE_KEY);
+    if (lastStored) {
+      const saved = JSON.parse(lastStored);
+      validatePlan(saved.plan);
+      state = { plan: saved.plan, etag: saved.etag ?? null, dirty: !!saved.dirty };
+    }
+  } catch {
+    // Brak dostępu do localStorage lub uszkodzony wpis — blokujemy zapis, żeby niczego nie nadpisać.
+    storageBlocked = true;
+  }
+}
+
+function persist(next) {
+  if (storageBlocked) {
+    throw Error('Zapis lokalny jest zablokowany. Wyeksportuj plan przed przeładowaniem strony.');
+  }
+  if (localStorage.getItem(STORAGE_KEY) !== lastStored) {
+    throw Error('Inna karta zmieniła plan. Wyeksportuj swoją kopię i odśwież stronę.');
+  }
+
+  const encoded = JSON.stringify(next);
+  localStorage.setItem(STORAGE_KEY, encoded);
+  lastStored = encoded;
+  state = next;
+}
+
+/** Wykonuje zmianę na kopii planu, waliduje ją, zapisuje lokalnie i odświeża widok. */
+function mutate(change) {
+  if (busy) throw Error('Poczekaj na zakończenie synchronizacji.');
+
+  const next = clone(state);
+  change(next.plan);
+  validatePlan(next.plan);
+  next.dirty = true;
+
+  persist(next);
+  render();
+  reportState();
+}
+
+// --- Widok tygodnia ----------------------------------------------------------
+
+function render() {
+  const weekEnd = addDays(week, 6);
+  $('weekTitle').textContent = `${formatDate(week)} – ${formatDate(weekEnd)} ${week.slice(0, 4)}`;
+  $('jump').value = week;
+
+  const events = state.plan.events.filter((e) => e.date >= week && e.date <= weekEnd);
+  const minutes = events.reduce((sum, e) => sum + toMinutes(e.end) - toMinutes(e.start), 0);
+  $('summary').textContent =
+    `Liczba spotkań: ${events.length} · Łącznie: ${Math.floor(minutes / 60)} godz. ${minutes % 60} min`;
+
+  const calendar = $('calendar');
+  calendar.replaceChildren();
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(week, i);
+    calendar.append(renderDay(date, DAY_NAMES[i], events));
+  }
+}
+
+function renderDay(date, dayName, weekEvents) {
+  const day = node('section', date === today() ? 'day today' : 'day');
+
+  const head = node('div', 'dayhead');
+  head.append(node('span', '', dayName), node('strong', '', date.slice(8)));
+  day.append(head);
+
+  const list = node('div', 'events');
+  const dayEvents = weekEvents
+    .filter((e) => e.date === date)
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  for (const event of dayEvents) list.append(renderEvent(event, dayEvents));
+  if (!dayEvents.length) list.append(node('p', 'empty', 'Bez zajęć'));
+
+  day.append(list);
+  return day;
+}
+
+function renderEvent(event, dayEvents) {
+  const subject = state.plan.subjects.find((s) => s.id === event.subjectId);
+  const button = node('button', 'event');
+  button.style.setProperty('--event-color', subject.color);
+
+  button.append(
+    node('span', 'time', `${event.start} – ${event.end}`),
+    node('span', 'name', subject.name),
+    node('span', 'type', event.type),
+  );
+
+  if (event.room || event.teacher) {
+    button.append(node('span', 'meta', [event.room, event.teacher].filter(Boolean).join(' · ')));
+  }
+
+  const overlaps = dayEvents.some(
+    (other) => other.id !== event.id && other.start < event.end && other.end > event.start,
+  );
+  if (overlaps) button.append(node('span', 'meta', '⚠ Nakładające się godziny'));
+
+  if (event.notes) button.append(node('span', 'meta', event.notes));
+
+  button.onclick = () => openEventDialog(event.id);
+  return button;
+}
+
+// --- Przedmioty --------------------------------------------------------------
+
+function renderSubjectList() {
+  const list = $('subjectList');
+  list.replaceChildren();
+
+  for (const subject of state.plan.subjects) {
+    const row = node('div', 'subjectrow');
+    const editButton = node('button', '', 'Edytuj');
+    const deleteButton = node('button', 'danger', 'Usuń');
+
+    editButton.onclick = () => {
+      $('subjectId').value = subject.id;
+      $('subjectName').value = subject.name;
+      $('subjectColor').value = subject.color;
+      $('subjectError').textContent = '';
+    };
+
+    deleteButton.onclick = () => deleteSubject(subject);
+
+    row.append(node('span', '', subject.name), editButton, deleteButton);
+    list.append(row);
+  }
+}
+
+function openSubjectDialog(message = '') {
+  renderSubjectList();
+  $('subjectError').textContent = message;
+  $('subjectDialog').showModal();
+}
+
+function resetSubjectForm() {
+  $('subjectForm').reset();
+  $('subjectId').value = '';
+}
+
+function deleteSubject(subject) {
+  try {
+    if (state.plan.events.some((e) => e.subjectId === subject.id)) {
+      throw Error('Najpierw usuń zajęcia tego przedmiotu.');
+    }
+    if (!confirm(`Usunąć przedmiot „${subject.name}”?`)) return;
+
+    mutate((plan) => {
+      plan.subjects = plan.subjects.filter((s) => s.id !== subject.id);
+    });
+    resetSubjectForm();
+    renderSubjectList();
+  } catch (err) {
+    $('subjectError').textContent = err.message;
+  }
+}
+
+function saveSubject(event) {
+  event.preventDefault();
+  try {
+    const name = $('subjectName').value.trim();
+    const id = $('subjectId').value || uid();
+    const color = $('subjectColor').value;
+
+    mutate((plan) => {
+      const duplicate = plan.subjects.find(
+        (s) => s.id !== id && s.name.toLocaleLowerCase('pl') === name.toLocaleLowerCase('pl'),
+      );
+      if (duplicate) throw Error('Taki przedmiot już istnieje. Dodaj do niego inny typ zajęć.');
+
+      const subject = { id, name, color };
+      const index = plan.subjects.findIndex((s) => s.id === id);
+      if (index < 0) plan.subjects.push(subject);
+      else plan.subjects[index] = subject;
+    });
+
+    resetSubjectForm();
+    $('subjectError').textContent = '';
+    renderSubjectList();
+  } catch (err) {
+    $('subjectError').textContent = err.message;
+  }
+}
+
+// --- Zajęcia -----------------------------------------------------------------
+
+const EVENT_FIELDS = ['type', 'start', 'end', 'room', 'teacher', 'notes'];
+
+function openEventDialog(id) {
+  if (busy) return;
+
+  if (!state.plan.subjects.length) {
+    openSubjectDialog('Najpierw dodaj przedmiot, a następnie jego zajęcia.');
+    return;
+  }
+
+  editingId = id || null;
+  const event = state.plan.events.find((e) => e.id === id);
+
+  $('eventForm').reset();
+  $('eventError').textContent = '';
+
+  const select = $('subject');
+  select.replaceChildren();
+  for (const subject of state.plan.subjects) {
+    const option = node('option', '', subject.name);
+    option.value = subject.id;
+    select.append(option);
+  }
+
+  $('eventTitle').textContent = event ? 'Edytuj zajęcia' : 'Dodaj zajęcia';
+  $('repeatFields').hidden = !!event;
+  $('scopeLabel').hidden = !event;
+  $('deleteEvent').hidden = !event;
+  $('untilLabel').hidden = true;
+  $('manualLabel').hidden = true;
+  $('until').required = false;
+
+  const t = today();
+  const todayInWeek = t >= week && t <= addDays(week, 6);
+  $('date').value = event?.date || (todayInWeek ? t : week);
+
+  if (event) {
+    for (const field of EVENT_FIELDS) $(field).value = event[field];
+    select.value = event.subjectId;
+  }
+
+  $('eventDialog').showModal();
+}
+
+function updateRepeatFields() {
+  const mode = $('repeat').value;
+  const repeating = mode === 'weekly' || mode === 'biweekly';
+  $('untilLabel').hidden = !repeating;
+  $('until').required = repeating;
+  $('manualLabel').hidden = mode !== 'manual';
+}
+
+function readEventForm() {
+  return {
+    subjectId: $('subject').value,
+    type: $('type').value.trim(),
+    date: $('date').value,
+    start: $('start').value,
+    end: $('end').value,
+    room: $('room').value.trim(),
+    teacher: $('teacher').value.trim(),
+    notes: $('notes').value.trim(),
+  };
+}
+
+/** Czy zajęcia `e` należą do zakresu zmiany (to spotkanie lub to i kolejne z serii). */
+function inScope(e, original, scope) {
+  if (e.id === original.id) return true;
+  return scope === 'future' && e.seriesId === original.seriesId && e.date >= original.date;
+}
+
+function saveEvent(submitEvent) {
+  submitEvent.preventDefault();
+  try {
+    const values = readEventForm();
+    if (values.end <= values.start) {
+      throw Error('Godzina zakończenia musi być późniejsza niż rozpoczęcia.');
+    }
+
+    mutate((plan) => {
+      if (editingId) {
+        const original = plan.events.find((e) => e.id === editingId);
+        const scope = $('scope').value;
+        // Przesunięcie daty (w dniach) stosujemy do każdego spotkania z zakresu.
+        const shiftDays = Math.round((Date.parse(values.date) - Date.parse(original.date)) / 86_400_000);
+
+        plan.events = plan.events.map((e) =>
+          inScope(e, original, scope) ? { ...e, ...values, date: addDays(e.date, shiftDays) } : e,
+        );
+      } else {
+        const seriesId = uid();
+        const dates = datesFor(values.date, $('until').value, $('repeat').value, $('manual').value);
+        for (const date of dates) {
+          plan.events.push({ ...values, date, id: uid(), seriesId });
+        }
+      }
+    });
+
+    $('eventDialog').close();
+  } catch (err) {
+    $('eventError').textContent = err.message;
+  }
+}
+
+function deleteEvent() {
+  if (!confirm('Usunąć zajęcia zgodnie z wybranym zakresem?')) return;
+  try {
+    mutate((plan) => {
+      const original = plan.events.find((e) => e.id === editingId);
+      const scope = $('scope').value;
+      plan.events = plan.events.filter((e) => !inScope(e, original, scope));
+    });
+    $('eventDialog').close();
+  } catch (err) {
+    $('eventError').textContent = err.message;
+  }
+}
+
+// --- Nawigacja po tygodniach -------------------------------------------------
+
+function showWeek(newWeek) {
+  week = newWeek;
+  render();
+}
+
+// --- Import / eksport --------------------------------------------------------
+
+function exportPlan() {
+  const json = JSON.stringify(state.plan, null, 2);
+  const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+
+  const link = node('a');
+  link.href = url;
+  link.download = `plan-${today()}.json`;
+  link.click();
+
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function importPlan() {
+  const input = $('import');
+  const file = input.files[0];
+  try {
+    if (!file) return;
+    if (file.size > MAX_IMPORT_BYTES) throw Error('Maksymalny rozmiar pliku to 2 MB.');
+
+    const plan = validatePlan(JSON.parse(await file.text()));
+    if (!confirm('Zastąpić lokalny plan danymi z pliku? W razie potrzeby najpierw wyeksportuj obecną kopię.')) {
+      return;
+    }
+    mutate((current) => Object.assign(current, plan));
+  } catch (err) {
+    setStatus(err instanceof SyntaxError ? 'Plik nie jest prawidłowym JSON-em.' : err.message);
+  } finally {
+    input.value = '';
+  }
+}
+
+// --- Klucz dostępu i synchronizacja z chmurą ---------------------------------
+
+function openConnectionDialog() {
+  try {
+    $('token').value = localStorage.getItem(TOKEN_KEY) || '';
+    $('connectionDialog').showModal();
+  } catch (err) {
+    setStatus(err.message);
+  }
+}
+
+function saveConnection(event) {
+  event.preventDefault();
+  try {
+    const token = $('token').value.trim();
+    if (token && token.length < MIN_TOKEN_LENGTH) {
+      throw Error(`Klucz musi mieć minimum ${MIN_TOKEN_LENGTH} znaki.`);
+    }
+
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+
+    $('connectionDialog').close();
+    setStatus('Ustawienie zapisane. Teraz pobierz plan lub zapisz lokalny plan w chmurze.');
+  } catch (err) {
+    setStatus(err.message);
+  }
+}
+
+function setButtonsDisabled(disabled) {
+  for (const button of document.querySelectorAll('button')) button.disabled = disabled;
+}
+
+/** Wysyła żądanie do Workera. direction: 'pull' (GET) lub 'push' (PUT). */
+async function callApi(direction, token) {
+  const headers = { Authorization: 'Bearer ' + token };
+  const options = { method: 'GET', headers, cache: 'no-store', signal: AbortSignal.timeout(API_TIMEOUT_MS) };
+
+  if (direction === 'push') {
+    options.method = 'PUT';
+    options.body = JSON.stringify(state.plan);
+    headers['Content-Type'] = 'application/json';
+    // Zapis warunkowy: nadpisz tylko wersję, którą znamy; przy pierwszym zapisie — tylko gdy pliku nie ma.
+    if (state.etag) headers['If-Match'] = `"${state.etag}"`;
+    else headers['If-None-Match'] = '*';
+  }
+
+  const response = await fetch(API_URL, options);
+
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw Error('API nie jest dostępne. Uruchom projekt przez npm run dev albo wdróż Worker.');
+  }
+  if (!response.ok) throw Error(data.error || 'Błąd połączenia.');
+  return data;
+}
+
+async function sync(direction) {
+  if (busy) return;
+  try {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      $('connectionDialog').showModal();
+      return;
+    }
+
+    if (
+      direction === 'pull' &&
+      state.dirty &&
+      !confirm('Pobranie zastąpi niezapisane lokalne zmiany. Wyeksportuj je najpierw, jeśli chcesz je zachować. Kontynuować?')
+    ) {
+      return;
+    }
+
+    busy = true;
+    setButtonsDisabled(true);
+    setStatus(direction === 'pull' ? 'Pobieranie planu…' : 'Zapisywanie planu…');
+
+    const data = await callApi(direction, token);
+
+    const next = clone(state);
+    if (direction === 'pull') next.plan = validatePlan(data.plan);
+    next.etag = data.etag;
+    next.dirty = false;
+    persist(next);
+
+    render();
+    setStatus(`Zsynchronizowano · ${new Date().toLocaleTimeString('pl-PL')}.`);
+  } catch (err) {
+    if (err.name === 'TimeoutError') {
+      setStatus('Przekroczono czas połączenia. Lokalny plan pozostał bez zmian.');
+    } else {
+      setStatus(err.message + ' Lokalna kopia pozostaje dostępna.');
+    }
+  } finally {
+    busy = false;
+    setButtonsDisabled(false);
+  }
+}
+
+// --- Podpięcie zdarzeń -------------------------------------------------------
+
+function bindEvents() {
+  $('addEvent').onclick = () => openEventDialog();
+  $('eventForm').onsubmit = saveEvent;
+  $('deleteEvent').onclick = deleteEvent;
+  $('repeat').onchange = updateRepeatFields;
+
+  $('subjects').onclick = () => openSubjectDialog();
+  $('subjectForm').onsubmit = saveSubject;
+  $('newSubject').onclick = resetSubjectForm;
+
+  for (const button of document.querySelectorAll('[data-close]')) {
+    button.onclick = () => button.closest('dialog').close();
+  }
+
+  $('prev').onclick = () => showWeek(addDays(week, -7));
+  $('next').onclick = () => showWeek(addDays(week, 7));
+  $('today').onclick = () => showWeek(monday(today()));
+  $('jump').onchange = () => {
+    if ($('jump').value) showWeek(monday($('jump').value));
+  };
+
+  $('export').onclick = exportPlan;
+  $('importButton').onclick = () => $('import').click();
+  $('import').onchange = importPlan;
+
+  $('connection').onclick = openConnectionDialog;
+  $('connectionForm').onsubmit = saveConnection;
+  $('pull').onclick = () => sync('pull');
+  $('push').onclick = () => sync('push');
+
+  // Inna karta tej samej przeglądarki zmieniła dane — blokujemy edycję, żeby się nie nadpisywać.
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEY || e.key === null) {
+      storageBlocked = true;
+      setStatus('Inna karta zmieniła dane. Wyeksportuj swoją kopię i odśwież stronę przed dalszą edycją.');
+    }
+  });
+}
+
+// --- Start -------------------------------------------------------------------
+
+loadFromStorage();
+bindEvents();
+render();
+reportState();

@@ -1,0 +1,37 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  // Nazwa Workera — od niej zależy adres: https://student-calendar.<twoja-subdomena>.workers.dev
+  "name": "student-calendar",
+  "main": "worker.js",
+  "compatibility_date": "2025-10-01",
+
+  // Opcjonalnie: ID konta Cloudflare (Dashboard → Workers & Pages → prawa kolumna "Account ID").
+  // Potrzebne tylko, gdy masz dostęp do kilku kont lub wdrażasz z CI bez `wrangler login`.
+  // "account_id": "WKLEJ_TUTAJ_ACCOUNT_ID",
+
+  // Statyczny frontend z ./public; Worker uruchamia się najpierw tylko dla /api/*.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // Prywatny bucket R2 dostępny w kodzie jako env.PLANS.
+  // Bucket trzeba najpierw utworzyć: npx wrangler r2 bucket create student-calendar-plans
+  "r2_buckets": [
+    {
+      "binding": "PLANS",
+      "bucket_name": "student-calendar-plans"
+    }
+  ],
+
+  // Logi Workera widoczne w Dashboard → Workers → student-calendar → Logs.
+  "observability": {
+    "enabled": true
+  }
+
+  // Sekret PLAN_TOKEN NIE trafia do tego pliku. Ustaw go poleceniem:
+  //   npx wrangler secret put PLAN_TOKEN
+  // Lokalnie (npm run dev) jest czytany z pliku .dev.vars.
+}

@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#163d36">
+    <title>Plan studenta</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="module" src="app.js"></script>
+  </head>
+
+  <body>
+    <header>
+      <div>
+        <span class="eyebrow">TWÓJ TYDZIEŃ, PO TWOJEMU</span>
+        <h1>Plan studenta<span>.</span></h1>
+        <p>Jeden przedmiot. Różne zajęcia. Dowolne tygodnie.</p>
+      </div>
+      <button type="button" id="addEvent" class="primary">+ Dodaj zajęcia</button>
+    </header>
+
+    <main>
+      <!-- Pasek narzędzi -->
+      <section class="toolbar" aria-label="Zarządzanie planem">
+        <div class="actions">
+          <button type="button" id="subjects">Przedmioty</button>
+          <button type="button" id="export">Eksport JSON</button>
+          <button type="button" id="importButton">Import JSON</button>
+          <input type="file" id="import" accept="application/json,.json" hidden>
+        </div>
+        <div class="actions">
+          <button type="button" id="connection">Klucz dostępu</button>
+          <button type="button" id="pull">↓ Pobierz z chmury</button>
+          <button type="button" id="push" class="primary">↑ Zapisz w chmurze</button>
+        </div>
+      </section>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <!-- Nawigacja po tygodniach -->
+      <section class="weekbar">
+        <div>
+          <span class="eyebrow">KALENDARZ TYGODNIOWY</span>
+          <h2 id="weekTitle"></h2>
+          <p id="summary"></p>
+        </div>
+        <div class="actions">
+          <button type="button" id="prev" aria-label="Poprzedni tydzień">←</button>
+          <button type="button" id="today">Dzisiaj</button>
+          <button type="button" id="next" aria-label="Następny tydzień">→</button>
+          <label class="datejump">
+            Przejdź do
+            <input type="date" id="jump">
+          </label>
+        </div>
+      </section>
+
+      <div id="calendar" class="calendar"></div>
+
+      <p class="hint">
+        Kliknij zajęcia, żeby zmienić termin, salę lub usunąć spotkanie.
+        Godziny są godzinami lokalnymi uczelni (Polska).
+      </p>
+    </main>
+
+    <!-- Okno: dodawanie / edycja zajęć -->
+    <dialog id="eventDialog">
+      <form id="eventForm">
+        <div class="dialoghead">
+          <h2 id="eventTitle">Dodaj zajęcia</h2>
+          <button type="button" data-close aria-label="Zamknij">×</button>
+        </div>
+
+        <label>
+          Przedmiot
+          <select id="subject" required></select>
+        </label>
+        <p class="hint">Nowy przedmiot dodasz w przycisku „Przedmioty”.</p>
+
+        <div class="pair">
+          <label>
+            Typ zajęć
+            <input id="type" list="types" required maxlength="60" value="Laboratorium">
+            <datalist id="types">
+              <option>Wykład</option>
+              <option>Laboratorium</option>
+              <option>Projekt</option>
+              <option>Ćwiczenia</option>
+              <option>Seminarium</option>
+            </datalist>
+          </label>
+          <label>
+            Data
+            <input id="date" type="date" required min="2000-01-01" max="2100-12-31">
+          </label>
+        </div>
+
+        <div class="pair">
+          <label>
+            Od
+            <input id="start" type="time" required value="08:00">
+          </label>
+          <label>
+            Do
+            <input id="end" type="time" required value="09:30">
+          </label>
+        </div>
+
+        <div class="pair">
+          <label>
+            Sala
+            <input id="room" maxlength="120" placeholder="np. B-204">
+          </label>
+          <label>
+            Prowadzący
+            <input id="teacher" maxlength="120">
+          </label>
+        </div>
+
+        <!-- Widoczne tylko przy dodawaniu nowych zajęć -->
+        <div id="repeatFields">
+          <div class="pair">
+            <label>
+              Powtarzanie
+              <select id="repeat">
+                <option value="once">Tylko jeden termin</option>
+                <option value="weekly">Co tydzień</option>
+                <option value="biweekly">Co dwa tygodnie</option>
+                <option value="manual">Wskazane daty</option>
+              </select>
+            </label>
+            <label id="untilLabel" hidden>
+              Powtarzaj do
+              <input id="until" type="date" min="2000-01-01" max="2100-12-31">
+            </label>
+          </div>
+          <label id="manualLabel" hidden>
+            Daty spotkań
+            <textarea id="manual" placeholder="2026-10-14, 2026-11-25, 2026-12-09"></textarea>
+            <small>Ta lista zastępuje datę powyżej.</small>
+          </label>
+        </div>
+
+        <!-- Widoczne tylko przy edycji istniejących zajęć -->
+        <label id="scopeLabel" hidden>
+          Zakres zmiany / usunięcia
+          <select id="scope">
+            <option value="one">Tylko to spotkanie</option>
+            <option value="future">To i kolejne spotkania tej serii</option>
+          </select>
+          <small>Zmiana daty przesuwa kolejne spotkania o tyle samo dni.</small>
+        </label>
+
+        <label>
+          Notatka
+          <textarea id="notes" maxlength="2000" placeholder="Co warto przygotować?"></textarea>
+        </label>
+
+        <p id="eventError" class="error" role="alert"></p>
+
+        <div class="dialogfoot">
+          <button type="button" id="deleteEvent" class="danger" hidden>Usuń zajęcia</button>
+          <button type="submit" class="primary">Zapisz lokalnie</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Okno: przedmioty -->
+    <dialog id="subjectDialog">
+      <div class="dialoghead">
+        <h2>Przedmioty</h2>
+        <button type="button" data-close aria-label="Zamknij">×</button>
+      </div>
+
+      <div id="subjectList"></div>
+
+      <form id="subjectForm">
+        <input id="subjectId" type="hidden">
+        <label>
+          Nazwa przedmiotu
+          <input id="subjectName" required maxlength="120" placeholder="np. Metody sztucznej inteligencji">
+        </label>
+        <label>
+          Kolor
+          <input id="subjectColor" type="color" value="#397d70">
+        </label>
+
+        <p id="subjectError" class="error" role="alert"></p>
+
+        <div class="actions">
+          <button type="submit" class="primary">Zapisz przedmiot</button>
+          <button type="button" id="newSubject">Nowy / wyczyść</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Okno: klucz dostępu do chmury -->
+    <dialog id="connectionDialog">
+      <form id="connectionForm">
+        <div class="dialoghead">
+          <h2>Połączenie z chmurą</h2>
+          <button type="button" data-close aria-label="Zamknij">×</button>
+        </div>
+
+        <p>
+          Wpisz ten sam klucz co sekret <code>PLAN_TOKEN</code> w Cloudflare.
+          Bez klucza możesz używać planu lokalnie.
+        </p>
+
+        <label>
+          Klucz dostępu
+          <input id="token" type="password" minlength="32" maxlength="200" autocomplete="off">
+        </label>
+        <p class="hint">
+          Klucz zostanie zapisany w tej przeglądarce. Używaj tej opcji na własnych urządzeniach.
+          Puste pole usuwa zapisany klucz.
+        </p>
+
+        <button type="submit" class="primary">Zapisz ustawienie</button>
+      </form>
+    </dialog>
+  </body>
+</html>
