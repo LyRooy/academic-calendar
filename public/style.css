@@ -188,8 +188,17 @@ button {
   background: var(--control);
   border: 1px solid var(--line);
   border-radius: 9px;
-  padding: 11px 15px;
+  padding: 10px 14px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+button .ph {
+  font-size: 16px;
+  line-height: 1;
 }
 
 button:hover {
@@ -342,9 +351,12 @@ textarea:focus-visible {
 }
 
 .dayhead-add {
-  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
   line-height: 1;
-  padding: 4px 8px;
+  padding: 4px 6px;
   border-radius: 6px;
   opacity: 0.7;
 }
@@ -355,7 +367,9 @@ textarea:focus-visible {
 
 /* Wskaźnik dnia specjalnego w nagłówku kolumny */
 .special-day-badge {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -363,6 +377,11 @@ textarea:focus-visible {
   padding: 5px 12px;
   border-bottom: 1px dashed var(--line);
   line-height: 1.4;
+  cursor: pointer;
+}
+
+.special-day-badge .ph {
+  font-size: 13px;
 }
 
 .special-day-badge.holiday {

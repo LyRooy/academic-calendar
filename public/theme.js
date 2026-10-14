@@ -5,7 +5,11 @@
 (function () {
   const STORAGE_KEY = 'student-calendar-theme';
   const MODES = ['auto', 'light', 'dark'];
-  const LABELS = { auto: '◐ Auto', light: '☀ Jasny', dark: '☾ Ciemny' };
+  const LABELS = {
+    auto: '<i class="ph ph-circle-half"></i> Auto',
+    light: '<i class="ph ph-sun"></i> Jasny',
+    dark: '<i class="ph ph-moon"></i> Ciemny',
+  };
   const THEME_COLORS = { light: '#163d36', dark: '#0f1715' };
 
   const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
@@ -39,7 +43,7 @@
 
     const button = document.getElementById('themeToggle');
     if (button) {
-      button.textContent = LABELS[mode];
+      button.innerHTML = LABELS[mode];
       button.title = 'Motyw: kliknij, aby zmienić (auto → jasny → ciemny)';
     }
   }

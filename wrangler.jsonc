@@ -1,8 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
 
-  // Nazwa Workera — od niej zależy adres: https://student-calendar.<twoja-subdomena>.workers.dev
-  "name": "student-calendar",
+  // Nazwa Workera — od niej zależy adres: https://academic-calendar.<twoja-subdomena>.workers.dev
+  "name": "academic-calendar",
   "main": "worker.js",
   "compatibility_date": "2025-10-01",
 

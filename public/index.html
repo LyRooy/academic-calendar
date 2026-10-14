@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#163d36">
     <title>Plan studenta</title>
     <script src="theme.js"></script>
+    <link rel="stylesheet" href="phosphor/style.css">
     <link rel="stylesheet" href="style.css">
     <script type="module" src="app.js"></script>
   </head>
@@ -18,8 +19,8 @@
         <p>Jeden przedmiot. Różne zajęcia. Dowolne tygodnie.</p>
       </div>
       <div class="actions header-actions">
-        <button type="button" id="themeToggle">◐ Auto</button>
-        <button type="button" id="addEvent" class="primary">+ Dodaj zajęcia</button>
+        <button type="button" id="themeToggle"><i class="ph ph-circle-half"></i> Auto</button>
+        <button type="button" id="addEvent" class="primary"><i class="ph ph-plus"></i> Dodaj zajęcia</button>
       </div>
     </header>
 
@@ -27,16 +28,16 @@
       <!-- Pasek narzędzi -->
       <section class="toolbar" aria-label="Zarządzanie planem">
         <div class="actions">
-          <button type="button" id="subjects">Przedmioty</button>
-          <button type="button" id="academicYearBtn">Struktura roku</button>
-          <button type="button" id="export">Eksport JSON</button>
-          <button type="button" id="importButton">Import JSON</button>
+          <button type="button" id="subjects"><i class="ph ph-book-open"></i> Przedmioty</button>
+          <button type="button" id="academicYearBtn"><i class="ph ph-calendar-blank"></i> Struktura roku</button>
+          <button type="button" id="export"><i class="ph ph-export"></i> Eksport JSON</button>
+          <button type="button" id="importButton"><i class="ph ph-download-simple"></i> Import JSON</button>
           <input type="file" id="import" accept="application/json,.json" hidden>
         </div>
         <div class="actions">
-          <button type="button" id="connection">Klucz dostępu</button>
-          <button type="button" id="pull">↓ Pobierz z chmury</button>
-          <button type="button" id="push" class="primary">↑ Zapisz w chmurze</button>
+          <button type="button" id="connection"><i class="ph ph-key"></i> Klucz dostępu</button>
+          <button type="button" id="pull"><i class="ph ph-arrow-down"></i> Pobierz z chmury</button>
+          <button type="button" id="push" class="primary"><i class="ph ph-arrow-up"></i> Zapisz w chmurze</button>
         </div>
       </section>
 
@@ -50,9 +51,9 @@
           <p id="summary"></p>
         </div>
         <div class="actions">
-          <button type="button" id="prev" aria-label="Poprzedni tydzień">←</button>
-          <button type="button" id="today">Dzisiaj</button>
-          <button type="button" id="next" aria-label="Następny tydzień">→</button>
+          <button type="button" id="prev" aria-label="Poprzedni tydzień"><i class="ph ph-arrow-left"></i></button>
+          <button type="button" id="today"><i class="ph ph-calendar-check"></i> Dzisiaj</button>
+          <button type="button" id="next" aria-label="Następny tydzień"><i class="ph ph-arrow-right"></i></button>
           <label class="datejump">
             Przejdź do
             <input type="date" id="jump">
@@ -73,7 +74,7 @@
       <form id="eventForm">
         <div class="dialoghead">
           <h2 id="eventTitle">Dodaj zajęcia</h2>
-          <button type="button" data-close aria-label="Zamknij">×</button>
+          <button type="button" data-close aria-label="Zamknij"><i class="ph ph-x"></i></button>
         </div>
 
         <label>
@@ -174,7 +175,7 @@
     <dialog id="subjectDialog">
       <div class="dialoghead">
         <h2>Przedmioty</h2>
-        <button type="button" data-close aria-label="Zamknij">×</button>
+        <button type="button" data-close aria-label="Zamknij"><i class="ph ph-x"></i></button>
       </div>
 
       <div id="subjectList"></div>
@@ -204,7 +205,7 @@
       <form id="connectionForm">
         <div class="dialoghead">
           <h2>Połączenie z chmurą</h2>
-          <button type="button" data-close aria-label="Zamknij">×</button>
+          <button type="button" data-close aria-label="Zamknij"><i class="ph ph-x"></i></button>
         </div>
 
         <p>
@@ -230,7 +231,7 @@
       <form id="academicYearForm">
         <div class="dialoghead">
           <h2>Struktura roku akademickiego</h2>
-          <button type="button" data-close aria-label="Zamknij">×</button>
+          <button type="button" data-close aria-label="Zamknij"><i class="ph ph-x"></i></button>
         </div>
 
         <p class="hint">

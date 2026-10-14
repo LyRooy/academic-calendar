@@ -165,22 +165,22 @@ function renderDay(date, dayName, weekEvents, specialDay) {
   const headInfo = node('div', 'dayhead-info');
   headInfo.append(node('span', '', dayName), node('strong', '', date.slice(8)));
 
-  const addHint = node('span', 'dayhead-add', '+');
+  const addHint = node('span', 'dayhead-add');
+  addHint.innerHTML = '<i class="ph ph-plus"></i>';
   addHint.title = 'Dodaj zajęcia w tym dniu';
   head.append(headInfo, addHint);
   day.append(head);
 
   // Oznaczenie dnia specjalnego (święto lub plan z innego dnia)
   if (specialDay) {
-    let badgeText = '';
+    const badge = node('div', `special-day-badge ${specialDay.type}`);
     if (isHoliday) {
-      badgeText = `🏖 ${specialDay.label || 'Dzień wolny'}`;
+      badge.innerHTML = `<i class="ph ph-sun-horizon"></i> ${specialDay.label || 'Dzień wolny'}`;
     } else if (isSwap) {
       const targetName = DAY_KEY_NAMES[specialDay.targetDay] || specialDay.targetDay;
       const labelSuffix = specialDay.label ? ` · ${specialDay.label}` : '';
-      badgeText = `🔄 Plan z ${targetName}${labelSuffix}`;
+      badge.innerHTML = `<i class="ph ph-arrows-clockwise"></i> Plan z ${targetName}${labelSuffix}`;
     }
-    const badge = node('div', `special-day-badge ${specialDay.type}`, badgeText);
     badge.onclick = () => openAcademicYearDialog();
     badge.title = 'Kliknij, aby edytować strukturę roku';
     day.append(badge);
@@ -194,8 +194,11 @@ function renderDay(date, dayName, weekEvents, specialDay) {
   for (const event of dayEvents) list.append(renderEvent(event, dayEvents));
 
   if (!dayEvents.length) {
-    const emptyBtn = node('button', 'day-empty-btn', isHoliday ? 'Dzień wolny od zajęć (+)' : '+ Dodaj zajęcia');
+    const emptyBtn = node('button', 'day-empty-btn');
     emptyBtn.type = 'button';
+    emptyBtn.innerHTML = isHoliday
+      ? '<i class="ph ph-sun-horizon"></i> Dzień wolny od zajęć'
+      : '<i class="ph ph-plus-circle"></i> Dodaj zajęcia';
     emptyBtn.onclick = () => openEventDialog(null, date);
     list.append(emptyBtn);
   }
