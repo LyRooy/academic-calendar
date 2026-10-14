@@ -153,11 +153,16 @@ export default {
     if (origin && origin !== url.origin) return error('Niedozwolone źródło żądania.', 403);
 
     try {
+      if (!env.PLANS) {
+        console.error('Błąd: Brak powiązania R2 env.PLANS w konfiguracji Workera.');
+        return error('Brak powiązania magazynu R2 (PLANS) w konfiguracji Workera.', 503);
+      }
       if (request.method === 'GET') return await getPlan(env);
       if (request.method === 'PUT') return await putPlan(request, env);
       return error('Dozwolone GET i PUT.', 405, { Allow: 'GET, PUT' });
-    } catch {
-      return error('Nie udało się połączyć z magazynem R2. Spróbuj ponownie.', 503);
+    } catch (err) {
+      console.error('Błąd operacji R2:', err);
+      return error(`Nie udało się połączyć z magazynem R2 (${err.message || 'błąd R2'}). Spróbuj ponownie.`, 503);
     }
   },
 };
