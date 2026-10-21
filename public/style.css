@@ -276,6 +276,11 @@ textarea:focus-visible {
    Pasek narzędzi i status
    ========================================================================== */
 
+.menu-toggle,
+.mobile-only {
+  display: none;
+}
+
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -336,8 +341,13 @@ textarea:focus-visible {
 }
 
 /* ==========================================================================
-   Kalendarz i siatka godzinowa (wiersze co 15 minut)
+   Kalendarz i siatka godzinowa (wiersze co 5 minut)
    ========================================================================== */
+
+/* Pasek przełączania dni na telefonie (styl USOS) — ukryty na komputerze */
+.mobile-day-tabs {
+  display: none;
+}
 
 .calendar-scroll {
   overflow-x: auto;
@@ -1164,72 +1174,229 @@ textarea {
   }
 }
 
-@media (max-width: 650px) {
+/* Telefony i mniejsze tablety: widok jednego wybranego dnia z paskiem przełączania (styl USOS) */
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none !important;
+  }
+
+  .menu-toggle,
+  .mobile-only {
+    display: inline-flex;
+  }
+
   header,
   main {
-    padding-left: 16px;
-    padding-right: 16px;
+    padding-left: 10px;
+    padding-right: 10px;
   }
 
   header {
-    padding-top: 25px;
-    align-items: flex-start;
-    gap: 12px;
+    padding-top: 12px;
+    padding-bottom: 8px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
   }
 
-  header p {
-    font-size: 12px;
+  h1 {
+    font-size: 22px;
+    letter-spacing: -1px;
   }
 
   .header-actions {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
     gap: 6px;
+    flex-wrap: nowrap;
   }
 
   .header-actions button {
     font-size: 12px;
     white-space: nowrap;
-    padding: 10px;
+    padding: 8px 10px;
   }
 
-  h1 {
-    font-size: 31px;
+  /* Skrócone przyciski edycji i dodawania na pasku górnym telefonu (ikona) */
+  #editModeToggle .btn-label,
+  #addEvent .btn-label {
+    display: none;
   }
 
-  .eyebrow {
-    font-size: 9px;
-    letter-spacing: 1px;
+  .menu-toggle[aria-expanded="true"] {
+    background: var(--green);
+    color: var(--on-green);
+    border-color: var(--green);
   }
 
-  button {
-    padding: 10px;
-    font-size: 12px;
+  /* Rozwijany panel hamburgera z narzędziami i chmurą */
+  .nav-panel {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    padding: 12px;
+    margin-bottom: 10px;
+    box-shadow: 0 14px 36px var(--shadow);
+  }
+
+  .nav-panel.open {
+    display: block;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 10px;
   }
 
   .toolbar .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
+    width: 100%;
+  }
+
+  .toolbar .actions button {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 9px 10px;
+    font-size: 12px;
   }
 
   .status {
+    margin: 10px 0 0;
+    padding: 8px 10px;
+    min-height: 0;
+    font-size: 11px;
     overflow-wrap: anywhere;
   }
 
+  button {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  /* Zwarty nagłówek tygodnia i nawigacja w jednej linii */
   .weekbar {
-    align-items: flex-start;
+    align-items: stretch;
     flex-direction: column;
+    gap: 6px;
+    margin: 4px 0 8px;
+  }
+
+  .weekbar .eyebrow {
+    display: none;
+  }
+
+  .weekbar h2 {
+    font-size: 16px;
+    margin: 0;
+  }
+
+  .weekbar p {
+    font-size: 11px;
+    line-height: 1.35;
   }
 
   .weekbar .actions {
     width: 100%;
+    flex-wrap: nowrap;
+    gap: 6px;
   }
 
   .datejump {
     margin-left: auto;
+    gap: 4px;
+  }
+
+  .datejump-label {
+    display: none;
+  }
+
+  .datejump input {
+    padding: 7px 8px;
+    font-size: 12px;
+  }
+
+  /* Pasek dni tygodnia (PN | WT | ŚR | CZ | PT | SB | ND) */
+  .mobile-day-tabs {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+
+  .mobile-day-tab {
+    border: none;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    padding: 8px 2px 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    color: var(--muted);
+  }
+
+  .mobile-day-tab:hover {
+    background: var(--soft);
+  }
+
+  .mobile-day-tab .tab-code {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+  }
+
+  .mobile-day-tab .tab-num {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .mobile-day-tab .tab-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: transparent;
+    margin-top: 1px;
+  }
+
+  .mobile-day-tab .tab-dot.has-events {
+    background: var(--green);
+  }
+
+  .mobile-day-tab.is-today .tab-code {
+    color: var(--today-border);
+  }
+
+  .mobile-day-tab.active {
+    background: var(--soft);
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+
+  .mobile-day-tab.active .tab-code {
+    color: var(--accent);
+  }
+
+  .calendar-scroll {
+    overflow-x: visible;
   }
 
   .calendar {
-    grid-template-columns: 52px repeat(7, minmax(145px, 1fr));
+    grid-template-columns: 54px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .calendar .day:not(.mobile-active) {
+    display: none;
   }
 
   .hint {

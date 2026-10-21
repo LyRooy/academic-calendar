@@ -22,6 +22,11 @@ const API_TIMEOUT_MS = 20_000;
 const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
 const MIN_TOKEN_LENGTH = 32;
 const DAY_NAMES = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Ndz'];
+const MOBILE_DAY_CODES = ['PN', 'WT', 'ŚR', 'CZ', 'PT', 'SB', 'ND'];
+
+function weekdayIndex(date) {
+  return (new Date(date + 'T12:00:00Z').getUTCDay() + 6) % 7;
+}
 
 /** state.plan – dane planu, state.etag – wersja z chmury, state.dirty – niezsynchronizowane zmiany */
 let state = { plan: emptyPlan(), etag: null, dirty: false };
@@ -32,6 +37,7 @@ let editMode = false;        // false = normalny tryb przeglądania, true = tryb
 let editingId = null;        // id edytowanych zajęć (null = nowe)
 let detailsEventId = null;   // id zajęć aktualnie wyświetlanych w oknie szczegółów
 let week = monday(today());  // poniedziałek wyświetlanego tygodnia
+let selectedDayIndex = weekdayIndex(today()); // 0..6 — aktywny dzień w widoku mobilnym (jak w USOS)
 
 // --- Narzędzia ---------------------------------------------------------------
 
@@ -91,8 +97,8 @@ function setEditMode(enabled) {
   const toggle = $('editModeToggle');
   toggle.setAttribute('aria-pressed', String(editMode));
   toggle.innerHTML = editMode
-    ? '<i class="ph ph-pencil-simple-line"></i> Tryb edycji: Wł.'
-    : '<i class="ph ph-pencil-simple"></i> Tryb edycji: Wył.';
+    ? '<i class="ph ph-pencil-simple-line"></i> <span class="btn-label">Tryb edycji: Wł.</span>'
+    : '<i class="ph ph-pencil-simple"></i> <span class="btn-label">Tryb edycji: Wył.</span>';
 
   $('addEvent').hidden = !editMode;
   $('calendarHint').textContent = editMode
@@ -100,6 +106,17 @@ function setEditMode(enabled) {
     : 'Kliknij zajęcia, aby zobaczyć szczegóły przedmiotu i spotkania. Włącz „Tryb edycji” u góry, aby dodawać lub zmieniać zajęcia w kalendarzu.';
 
   render();
+}
+
+function setMobileMenuOpen(open) {
+  const panel = $('navPanel');
+  const btn = $('menuToggle');
+  const isOpen = !!open;
+  panel.classList.toggle('open', isOpen);
+  btn.setAttribute('aria-expanded', String(isOpen));
+  btn.innerHTML = isOpen
+    ? '<i class="ph ph-x"></i><span>Zamknij</span>'
+    : '<i class="ph ph-list"></i><span>Menu</span>';
 }
 
 // --- Zapis lokalny -----------------------------------------------------------
@@ -296,10 +313,42 @@ function renderTimeColumn(gridStartMin, gridEndMin) {
   return col;
 }
 
+function renderMobileDayTabs(weekEvents, specialDayMap) {
+  const nav = $('mobileDayTabs');
+  nav.replaceChildren();
+
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(week, i);
+    const dayEvs = weekEvents.filter((e) => e.date === date);
+    const effectiveSpecial = specialDayMap.get(date) || holidayFor(date, state.plan.academicYear);
+    const isHoliday = effectiveSpecial?.type === 'holiday';
+
+    let cls = 'mobile-day-tab';
+    if (i === selectedDayIndex) cls += ' active';
+    if (date === today()) cls += ' is-today';
+    if (isHoliday) cls += ' is-holiday';
+
+    const btn = node('button', cls);
+    btn.type = 'button';
+    btn.setAttribute('aria-pressed', String(i === selectedDayIndex));
+
+    const code = node('span', 'tab-code', MOBILE_DAY_CODES[i]);
+    const num = node('span', 'tab-num', date.slice(8));
+    const dot = node('span', dayEvs.length ? 'tab-dot has-events' : 'tab-dot');
+    btn.append(code, num, dot);
+
+    btn.onclick = () => {
+      selectedDayIndex = i;
+      render();
+    };
+    nav.append(btn);
+  }
+}
+
 function render() {
   const weekEnd = addDays(week, 6);
   $('weekTitle').textContent = `${formatDate(week)} – ${formatDate(weekEnd)} ${week.slice(0, 4)}`;
-  $('jump').value = week;
+  $('jump').value = addDays(week, selectedDayIndex);
 
   const events = state.plan.events.filter((e) => e.date >= week && e.date <= weekEnd);
   const minutes = events.reduce((sum, e) => sum + toMinutes(e.end) - toMinutes(e.start), 0);
@@ -325,6 +374,8 @@ function render() {
   $('summary').textContent =
     `Liczba spotkań: ${events.length} · Łącznie zajęć: ${formatDuration(minutes)}${gapSummary}`;
 
+  renderMobileDayTabs(events, specialDayMap);
+
   const { startMin, endMin } = getGridBounds(events);
 
   const calendar = $('calendar');
@@ -335,7 +386,9 @@ function render() {
   for (let i = 0; i < 7; i++) {
     const date = addDays(week, i);
     const effectiveSpecial = specialDayMap.get(date) || holidayFor(date, state.plan.academicYear);
-    calendar.append(renderDay(date, DAY_NAMES[i], events, effectiveSpecial, startMin, endMin));
+    const dayEl = renderDay(date, DAY_NAMES[i], events, effectiveSpecial, startMin, endMin);
+    if (i === selectedDayIndex) dayEl.classList.add('mobile-active');
+    calendar.append(dayEl);
   }
 }
 
@@ -1455,8 +1508,12 @@ async function sync(direction) {
 // --- Podpięcie zdarzeń -------------------------------------------------------
 
 function bindEvents() {
+  $('menuToggle').onclick = () => {
+    const isOpen = $('navPanel').classList.contains('open');
+    setMobileMenuOpen(!isOpen);
+  };
   $('editModeToggle').onclick = () => setEditMode(!editMode);
-  $('addEvent').onclick = () => openEventDialog();
+  $('addEvent').onclick = () => openEventDialog(null, addDays(week, selectedDayIndex));
   $('subject').onchange = updateSubjectSelectionFields;
   $('start').onchange = () => {
     const startVal = $('start').value;
@@ -1485,16 +1542,25 @@ function bindEvents() {
     openSubjectDialog('', subj || null);
   };
 
-  $('subjects').onclick = () => openSubjectDialog();
+  $('subjects').onclick = () => {
+    setMobileMenuOpen(false);
+    openSubjectDialog();
+  };
   $('subjectForm').onsubmit = saveSubject;
   $('newSubject').onclick = resetSubjectForm;
 
-  $('bulkManageBtn').onclick = () => openBulkDialog();
+  $('bulkManageBtn').onclick = () => {
+    setMobileMenuOpen(false);
+    openBulkDialog();
+  };
   $('reconcileBtn').onclick = runReconcile;
   $('clearEventsBtn').onclick = clearAllEvents;
   $('clearAllBtn').onclick = clearEntireCalendar;
 
-  $('academicYearBtn').onclick = () => openAcademicYearDialog();
+  $('academicYearBtn').onclick = () => {
+    setMobileMenuOpen(false);
+    openAcademicYearDialog();
+  };
   $('academicYearForm').onsubmit = saveSpecialDay;
   $('specialDayType').onchange = updateSpecialDayTypeFields;
 
@@ -1504,16 +1570,80 @@ function bindEvents() {
 
   $('prev').onclick = () => showWeek(addDays(week, -7));
   $('next').onclick = () => showWeek(addDays(week, 7));
-  $('today').onclick = () => showWeek(monday(today()));
+  $('today').onclick = () => {
+    const t = today();
+    selectedDayIndex = weekdayIndex(t);
+    showWeek(monday(t));
+  };
   $('jump').onchange = () => {
-    if ($('jump').value) showWeek(monday($('jump').value));
+    const val = $('jump').value;
+    if (val) {
+      selectedDayIndex = weekdayIndex(val);
+      showWeek(monday(val));
+    }
   };
 
-  $('export').onclick = exportPlan;
-  $('importButton').onclick = () => $('import').click();
+  // Przełączanie dni gestem przesunięcia palcem (swipe lewo/prawo) na telefonie
+  let touchStartX = null;
+  let touchStartY = null;
+  $('calendar').addEventListener(
+    'touchstart',
+    (e) => {
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      }
+    },
+    { passive: true },
+  );
+  $('calendar').addEventListener(
+    'touchend',
+    (e) => {
+      if (touchStartX === null || !e.changedTouches.length) return;
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      touchStartX = null;
+      touchStartY = null;
+
+      if (window.innerWidth <= 768 && Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        if (dx < 0) {
+          // Przesunięcie w lewo → następny dzień
+          if (selectedDayIndex < 6) {
+            selectedDayIndex++;
+            render();
+          } else {
+            selectedDayIndex = 0;
+            showWeek(addDays(week, 7));
+          }
+        } else {
+          // Przesunięcie w prawo → poprzedni dzień
+          if (selectedDayIndex > 0) {
+            selectedDayIndex--;
+            render();
+          } else {
+            selectedDayIndex = 6;
+            showWeek(addDays(week, -7));
+          }
+        }
+      }
+    },
+    { passive: true },
+  );
+
+  $('export').onclick = () => {
+    setMobileMenuOpen(false);
+    exportPlan();
+  };
+  $('importButton').onclick = () => {
+    setMobileMenuOpen(false);
+    $('import').click();
+  };
   $('import').onchange = importPlan;
 
-  $('connection').onclick = openConnectionDialog;
+  $('connection').onclick = () => {
+    setMobileMenuOpen(false);
+    openConnectionDialog();
+  };
   $('connectionForm').onsubmit = saveConnection;
   $('pull').onclick = () => sync('pull');
   $('push').onclick = () => sync('push');

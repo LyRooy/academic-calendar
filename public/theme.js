@@ -41,10 +41,12 @@
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = THEME_COLORS[theme];
 
-    const button = document.getElementById('themeToggle');
-    if (button) {
-      button.innerHTML = LABELS[mode];
-      button.title = 'Motyw: kliknij, aby zmienić (auto → jasny → ciemny)';
+    for (const id of ['themeToggle', 'themeToggleMobile']) {
+      const button = document.getElementById(id);
+      if (button) {
+        button.innerHTML = LABELS[mode];
+        button.title = 'Motyw: kliknij, aby zmienić (auto → jasny → ciemny)';
+      }
     }
   }
 
@@ -62,7 +64,10 @@
   apply();
 
   document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('themeToggle').addEventListener('click', cycle);
+    for (const id of ['themeToggle', 'themeToggleMobile']) {
+      const btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', cycle);
+    }
     apply();
   });
 })();

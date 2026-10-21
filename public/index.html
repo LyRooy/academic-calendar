@@ -13,43 +13,57 @@
 
   <body>
     <header>
-      <div>
+      <div class="brand">
         <h1>Plan zajęć<span>.</span></h1>
       </div>
       <div class="actions header-actions">
-        <button type="button" id="themeToggle"><i class="ph ph-circle-half"></i> Auto</button>
+        <button type="button" id="themeToggle" class="desktop-only"><i class="ph ph-circle-half"></i> Auto</button>
         <button type="button" id="editModeToggle" aria-pressed="false">
-          <i class="ph ph-pencil-simple"></i> Tryb edycji: Wył.
+          <i class="ph ph-pencil-simple"></i> <span class="btn-label">Tryb edycji: Wył.</span>
         </button>
         <button type="button" id="addEvent" class="primary" hidden>
-          <i class="ph ph-plus"></i> Dodaj zajęcia
+          <i class="ph ph-plus"></i> <span class="btn-label">Dodaj zajęcia</span>
+        </button>
+        <button
+          type="button"
+          id="menuToggle"
+          class="menu-toggle"
+          aria-expanded="false"
+          aria-controls="navPanel"
+          aria-label="Menu narzędzi i synchronizacji"
+        >
+          <i class="ph ph-list"></i>
+          <span>Menu</span>
         </button>
       </div>
     </header>
 
     <main>
-      <!-- Pasek narzędzi -->
-      <section class="toolbar" aria-label="Zarządzanie planem">
-        <div class="actions">
-          <button type="button" id="subjects"><i class="ph ph-book-open"></i> Przedmioty</button>
-          <button type="button" id="academicYearBtn"><i class="ph ph-calendar-blank"></i> Struktura roku</button>
-          <button type="button" id="bulkManageBtn"><i class="ph ph-trash"></i> Masowe usuwanie / reset</button>
-          <button type="button" id="export"><i class="ph ph-export"></i> Eksport JSON</button>
-          <button type="button" id="importButton"><i class="ph ph-download-simple"></i> Import JSON</button>
-          <input type="file" id="import" accept="application/json,.json" hidden>
-        </div>
-        <div class="actions">
-          <button type="button" id="connection"><i class="ph ph-key"></i> Klucz dostępu</button>
-          <button type="button" id="pull"><i class="ph ph-arrow-down"></i> Pobierz z chmury</button>
-          <button type="button" id="push" class="primary"><i class="ph ph-arrow-up"></i> Zapisz w chmurze</button>
-        </div>
-      </section>
+      <!-- Panel narzędzi (na telefonie rozwijany z przycisku hamburgera „Menu”) -->
+      <div id="navPanel" class="nav-panel">
+        <section class="toolbar" aria-label="Zarządzanie planem">
+          <div class="actions">
+            <button type="button" id="themeToggleMobile" class="mobile-only"><i class="ph ph-circle-half"></i> Motyw</button>
+            <button type="button" id="subjects"><i class="ph ph-book-open"></i> Przedmioty</button>
+            <button type="button" id="academicYearBtn"><i class="ph ph-calendar-blank"></i> Struktura roku</button>
+            <button type="button" id="bulkManageBtn"><i class="ph ph-trash"></i> Masowe usuwanie / reset</button>
+            <button type="button" id="export"><i class="ph ph-export"></i> Eksport JSON</button>
+            <button type="button" id="importButton"><i class="ph ph-download-simple"></i> Import JSON</button>
+            <input type="file" id="import" accept="application/json,.json" hidden>
+          </div>
+          <div class="actions">
+            <button type="button" id="connection"><i class="ph ph-key"></i> Klucz dostępu</button>
+            <button type="button" id="pull"><i class="ph ph-arrow-down"></i> Pobierz z chmury</button>
+            <button type="button" id="push" class="primary"><i class="ph ph-arrow-up"></i> Zapisz w chmurze</button>
+          </div>
+        </section>
 
-      <p id="status" class="status" role="status" aria-live="polite"></p>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </div>
 
       <!-- Nawigacja po tygodniach -->
       <section class="weekbar">
-        <div>
+        <div class="weekbar-info">
           <span class="eyebrow">KALENDARZ TYGODNIOWY</span>
           <h2 id="weekTitle"></h2>
           <p id="summary"></p>
@@ -59,11 +73,13 @@
           <button type="button" id="today"><i class="ph ph-calendar-check"></i> Dzisiaj</button>
           <button type="button" id="next" aria-label="Następny tydzień"><i class="ph ph-arrow-right"></i></button>
           <label class="datejump">
-            <span>Przejdź do</span>
-            <input type="date" id="jump">
+            <span class="datejump-label">Przejdź do</span>
+            <input type="date" id="jump" aria-label="Przejdź do wybranej daty">
           </label>
         </div>
       </section>
+
+      <nav id="mobileDayTabs" class="mobile-day-tabs" aria-label="Wybór dnia tygodnia"></nav>
 
       <div class="calendar-scroll">
         <div id="calendar" class="calendar"></div>
