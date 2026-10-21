@@ -1108,6 +1108,29 @@ textarea:focus-visible {
 }
 
 /* ==========================================================================
+   Stopka
+   ========================================================================== */
+
+.app-footer {
+  max-width: 1500px;
+  margin: 36px auto 0;
+  padding: 22px 36px 36px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.app-footer .copyright {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0.2px;
+}
+
+/* ==========================================================================
    Okna dialogowe i formularze
    ========================================================================== */
 
@@ -1488,9 +1511,16 @@ textarea {
   }
 
   header,
-  main {
+  main,
+  .app-footer {
     padding-left: 10px;
     padding-right: 10px;
+  }
+
+  .app-footer {
+    margin-top: 24px;
+    padding-top: 16px;
+    padding-bottom: 24px;
   }
 
   header {
