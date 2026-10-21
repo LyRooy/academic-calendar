@@ -30,6 +30,8 @@
   --event-border: #dfe5db;
   --remote-bg: #e1e6e0;
   --remote-border: #bdc7bd;
+  --custom-bg: #fcf2df;
+  --custom-border: #deb473;
   --gap-bg: #e4ebe299;
   --gap-border: #c5d1c3;
   --grid-five: #eef2eb;
@@ -75,6 +77,8 @@
   --event-border: #2b3b36;
   --remote-bg: #111917;
   --remote-border: #2a3c36;
+  --custom-bg: #2a2015;
+  --custom-border: #7a582b;
   --gap-bg: #15211ecc;
   --gap-border: #314740;
   --grid-five: #15201d;
@@ -695,6 +699,13 @@ textarea:focus-visible {
   color: var(--text);
 }
 
+/* Wydarzenia własne / poza przedmiotem (wyróżnione ciepłym tłem i obramowaniem) */
+.event.custom-event {
+  background: var(--custom-bg);
+  border-color: var(--custom-border);
+  border-left: 5px solid var(--event-color);
+}
+
 .event-top-row {
   display: flex;
   align-items: center;
@@ -702,6 +713,14 @@ textarea:focus-visible {
   gap: 4px;
   width: 100%;
   margin-bottom: 1px;
+  flex-wrap: wrap;
+}
+
+.event-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .event .time {
@@ -711,7 +730,8 @@ textarea:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-.remote-tag {
+.remote-tag,
+.custom-tag {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -725,6 +745,12 @@ textarea:focus-visible {
   color: var(--text);
   border: 1px solid var(--line);
   flex-shrink: 0;
+}
+
+.custom-tag {
+  background: #d08b4326;
+  color: var(--accent);
+  border-color: var(--custom-border);
 }
 
 .event .name {
@@ -767,6 +793,12 @@ textarea:focus-visible {
   background: var(--remote-bg);
   color: var(--text);
   border: 1px solid var(--remote-border);
+}
+
+.details-badge.custom {
+  background: var(--custom-bg);
+  color: var(--accent);
+  border: 1px solid var(--custom-border);
 }
 
 /* ==========================================================================

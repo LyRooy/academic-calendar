@@ -87,6 +87,7 @@
       <div class="details-body">
         <div class="details-badges">
           <span id="detailsType" class="details-badge"></span>
+          <span id="detailsCustom" class="details-badge custom" hidden><i class="ph ph-star-four"></i> Wydarzenie własne</span>
           <span id="detailsRemote" class="details-badge remote" hidden><i class="ph ph-laptop"></i> Zdalnie (online)</span>
           <span id="detailsDate" class="details-badge subtle"></span>
           <span id="detailsTime" class="details-badge subtle"></span>
@@ -182,23 +183,23 @@
 
         <div class="pair">
           <label>
-            Od
-            <input id="start" type="time" required value="08:00">
+            <span id="startLabelText">Od</span>
+            <input id="start" type="time" value="08:00">
           </label>
           <label>
-            Do
-            <input id="end" type="time" required value="09:30">
+            <span id="endLabelText">Do</span>
+            <input id="end" type="time" value="09:30">
           </label>
         </div>
 
         <div class="pair">
           <label>
-            Sala
+            <span id="roomLabelText">Sala (opcjonalnie)</span>
             <input id="room" maxlength="120" placeholder="np. B-204">
           </label>
           <label>
-            Prowadzący
-            <input id="teacher" maxlength="120">
+            <span id="teacherLabelText">Prowadzący (opcjonalnie)</span>
+            <input id="teacher" maxlength="120" placeholder="opcjonalnie">
           </label>
         </div>
 

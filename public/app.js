@@ -506,10 +506,19 @@ function renderEvent(event, layout, gridStartMin) {
   const topRow = node('div', 'event-top-row');
   topRow.append(node('span', 'time', `${event.start} – ${event.end}`));
 
-  if (event.remote) {
-    const remoteTag = node('span', 'remote-tag');
-    remoteTag.innerHTML = '<i class="ph ph-laptop"></i> Zdalnie';
-    topRow.append(remoteTag);
+  if (isCustom || event.remote) {
+    const tagsWrap = node('span', 'event-tags');
+    if (isCustom) {
+      const customTag = node('span', 'custom-tag');
+      customTag.innerHTML = '<i class="ph ph-star-four"></i> Własne';
+      tagsWrap.append(customTag);
+    }
+    if (event.remote) {
+      const remoteTag = node('span', 'remote-tag');
+      remoteTag.innerHTML = '<i class="ph ph-laptop"></i> Zdalnie';
+      tagsWrap.append(remoteTag);
+    }
+    topRow.append(tagsWrap);
   }
 
   button.append(
@@ -549,12 +558,15 @@ function openEventDetailsDialog(id) {
   $('detailsColorDot').style.background = color;
   $('detailsSubjectName').textContent = title;
   $('detailsType').textContent = event.type;
+  $('detailsCustom').hidden = !isCustom;
   $('detailsRemote').hidden = !event.remote;
   $('detailsDate').textContent = formatFullDate(event.date);
   $('detailsTime').textContent = `${event.start} – ${event.end} (${formatDuration(toMinutes(event.end) - toMinutes(event.start))})`;
 
   $('detailsRoom').textContent = event.room || 'Nie podano';
   $('detailsTeacher').textContent = event.teacher || 'Nie podano';
+  $('detailsRoomRow').hidden = isCustom && !event.room;
+  $('detailsTeacherRow').hidden = isCustom && !event.teacher;
 
   const hasNotes = !!event.notes?.trim();
   $('detailsNotesSection').hidden = !hasNotes;
@@ -704,11 +716,21 @@ function updateSubjectSelectionFields() {
   $('customEventFields').hidden = !isCustom;
   $('customTitle').required = isCustom;
   $('subjectHint').textContent = isCustom
-    ? 'Wydarzenie poza przedmiotem (np. spotkanie z promotorem, wizyta u lekarza, koło naukowe).'
+    ? 'Wydarzenie poza przedmiotem (np. spotkanie z promotorem, wizyta u lekarza). Sala, osoba i czas zakończenia są opcjonalne (domyślny czas trwania: 1 godzina).'
     : 'Nowy przedmiot oraz jego opis dodasz w przycisku „Przedmioty”.';
 
-  if (isCustom && !editingId && $('type').value === 'Laboratorium') {
-    $('type').value = 'Spotkanie';
+  $('startLabelText').textContent = isCustom ? 'Od (domyślnie 12:00)' : 'Od';
+  $('endLabelText').textContent = isCustom ? 'Do (opcjonalnie, domyślnie +1 godz.)' : 'Do';
+  $('roomLabelText').textContent = isCustom ? 'Miejsce / Sala (opcjonalnie)' : 'Sala (opcjonalnie)';
+  $('teacherLabelText').textContent = isCustom ? 'Osoba / Prowadzący (opcjonalnie)' : 'Prowadzący (opcjonalnie)';
+
+  if (isCustom && !editingId) {
+    if ($('type').value === 'Laboratorium') {
+      $('type').value = 'Spotkanie';
+    }
+    if ($('start').value === '08:00' && $('end').value === '09:30') {
+      $('end').value = '09:00';
+    }
   }
 }
 
@@ -751,11 +773,6 @@ function openEventDialog(id, initialDate = null, initialStart = null) {
   const targetDate = event?.date || initialDate || fallbackDate;
   $('date').value = targetDate;
 
-  if (initialStart && !event) {
-    $('start').value = initialStart;
-    $('end').value = fromMinutes(Math.min(23 * 60 + 45, toMinutes(initialStart) + 90));
-  }
-
   if (event) {
     for (const field of EVENT_FIELDS) $(field).value = event[field];
     $('remote').checked = !!event.remote;
@@ -774,9 +791,14 @@ function openEventDialog(id, initialDate = null, initialStart = null) {
     $('customTitle').value = '';
     $('customColor').value = DEFAULT_CUSTOM_COLOR;
     const isTargetHoliday = !!holidayFor(targetDate, state.plan.academicYear);
-    if (!state.plan.subjects.length || isTargetHoliday) {
+    const defaultToCustom = !state.plan.subjects.length || isTargetHoliday;
+    if (defaultToCustom) {
       select.value = CUSTOM_SUBJECT_VALUE;
     }
+    const startVal = initialStart || (defaultToCustom ? '12:00' : '08:00');
+    const defaultDurationMin = defaultToCustom ? 60 : 90;
+    $('start').value = startVal;
+    $('end').value = fromMinutes(Math.min(23 * 60 + 55, toMinutes(startVal) + defaultDurationMin));
   }
 
   updateSubjectSelectionFields();
@@ -794,12 +816,18 @@ function updateRepeatFields() {
 
 function readEventForm() {
   const isCustom = $('subject').value === CUSTOM_SUBJECT_VALUE;
+  const start = $('start').value.trim() || (isCustom ? '12:00' : '08:00');
+  const defaultDuration = isCustom ? 60 : 90;
+  const end =
+    $('end').value.trim() ||
+    fromMinutes(Math.min(23 * 60 + 55, toMinutes(start) + defaultDuration));
+
   const base = {
     subjectId: isCustom ? null : $('subject').value,
-    type: $('type').value.trim(),
+    type: $('type').value.trim() || (isCustom ? 'Wydarzenie własne' : 'Laboratorium'),
     date: $('date').value,
-    start: $('start').value,
-    end: $('end').value,
+    start,
+    end,
     room: $('room').value.trim(),
     teacher: $('teacher').value.trim(),
     notes: $('notes').value.trim(),
@@ -1430,6 +1458,16 @@ function bindEvents() {
   $('editModeToggle').onclick = () => setEditMode(!editMode);
   $('addEvent').onclick = () => openEventDialog();
   $('subject').onchange = updateSubjectSelectionFields;
+  $('start').onchange = () => {
+    const startVal = $('start').value;
+    if (!startVal) return;
+    const isCustom = $('subject').value === CUSTOM_SUBJECT_VALUE;
+    const endVal = $('end').value;
+    if (!endVal || endVal <= startVal) {
+      const duration = isCustom ? 60 : 90;
+      $('end').value = fromMinutes(Math.min(23 * 60 + 55, toMinutes(startVal) + duration));
+    }
+  };
   $('eventForm').onsubmit = saveEvent;
   $('deleteEvent').onclick = deleteEvent;
   $('repeat').onchange = updateRepeatFields;
