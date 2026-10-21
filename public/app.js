@@ -699,21 +699,18 @@ function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndM
 }
 
 const CUSTOM_SUBJECT_VALUE = '__custom__';
-const DEFAULT_CUSTOM_COLOR = '#b87d3b';
 
 function getEventDisplay(event) {
   if (event.subjectId) {
     const subject = state.plan.subjects.find((s) => s.id === event.subjectId);
     return {
       title: subject?.name || 'Przedmiot',
-      color: subject?.color || '#397d70',
       isCustom: false,
       subject: subject || null,
     };
   }
   return {
     title: event.customTitle || 'Wydarzenie',
-    color: event.customColor || DEFAULT_CUSTOM_COLOR,
     isCustom: true,
     subject: null,
   };
@@ -764,7 +761,7 @@ function getEventTypeVisual(typeStr, isCustom = false) {
 }
 
 function renderEvent(event, layout, gridStartMin, specialDay = null) {
-  const { title, color, isCustom } = getEventDisplay(event);
+  const { title, isCustom } = getEventDisplay(event);
   const typeVisual = getEventTypeVisual(event.type, isCustom);
   const startMin = toMinutes(event.start);
   const endMin = toMinutes(event.end);
@@ -798,7 +795,6 @@ function renderEvent(event, layout, gridStartMin, specialDay = null) {
   ]
     .filter(Boolean)
     .join(' · ');
-  button.style.setProperty('--event-color', color);
   button.style.top = `${topPx}px`;
   button.style.height = `${heightPx}px`;
 
@@ -858,12 +854,11 @@ function renderEvent(event, layout, gridStartMin, specialDay = null) {
 function openEventDetailsDialog(id) {
   const event = state.plan.events.find((e) => e.id === id);
   if (!event) return;
-  const { title, color, isCustom, subject } = getEventDisplay(event);
+  const { title, isCustom, subject } = getEventDisplay(event);
   const typeVisual = getEventTypeVisual(event.type, isCustom);
 
   detailsEventId = event.id;
 
-  $('detailsColorDot').style.background = color;
   $('detailsSubjectName').textContent = title;
   $('detailsType').innerHTML = `<i class="ph ${typeVisual.icon}"></i> `;
   $('detailsType').append(document.createTextNode(event.type));
@@ -903,7 +898,6 @@ function setSubjectDetailsContent(details) {
 function fillSubjectForm(subject) {
   $('subjectId').value = subject.id;
   $('subjectName').value = subject.name;
-  $('subjectColor').value = subject.color;
   $('subjectDetails').value = subject.details || '';
   $('subjectError').textContent = '';
 }
@@ -917,9 +911,8 @@ function renderSubjectList() {
 
     const info = node('div', 'subjectrow-info');
     const nameRow = node('div', 'subjectrow-name');
-    const dot = node('span', 'color-dot');
-    dot.style.background = subject.color;
-    nameRow.append(dot, node('span', '', subject.name));
+    const icon = node('i', 'ph ph-book-bookmark');
+    nameRow.append(icon, node('span', '', subject.name));
     info.append(nameRow);
 
     if (subject.details) {
@@ -984,7 +977,6 @@ function saveSubject(event) {
   try {
     const name = $('subjectName').value.trim();
     const id = $('subjectId').value || uid();
-    const color = $('subjectColor').value;
     const details = $('subjectDetails').value.trim();
 
     mutate((plan) => {
@@ -993,7 +985,7 @@ function saveSubject(event) {
       );
       if (duplicate) throw Error('Taki przedmiot już istnieje. Dodaj do niego inny typ zajęć.');
 
-      const subject = details ? { id, name, color, details } : { id, name, color };
+      const subject = details ? { id, name, details } : { id, name };
       const index = plan.subjects.findIndex((s) => s.id === id);
       if (index < 0) plan.subjects.push(subject);
       else plan.subjects[index] = subject;
@@ -1131,17 +1123,14 @@ function openEventDialog(id, initialDate = null, initialStart = null) {
     if (event.subjectId) {
       select.value = event.subjectId;
       $('customTitle').value = '';
-      $('customColor').value = DEFAULT_CUSTOM_COLOR;
     } else {
       select.value = CUSTOM_SUBJECT_VALUE;
       $('customTitle').value = event.customTitle || '';
-      $('customColor').value = event.customColor || DEFAULT_CUSTOM_COLOR;
     }
     $('scope').value = 'one';
   } else {
     $('remote').checked = false;
     $('customTitle').value = '';
-    $('customColor').value = DEFAULT_CUSTOM_COLOR;
     const isTargetHoliday = !!holidayFor(targetDate, state.plan.academicYear);
     const defaultToCustom = !state.plan.subjects.length || isTargetHoliday;
     if (defaultToCustom) {
@@ -1188,7 +1177,6 @@ function readEventForm() {
   };
   if (isCustom) {
     base.customTitle = $('customTitle').value.trim();
-    base.customColor = $('customColor').value;
   }
   return base;
 }

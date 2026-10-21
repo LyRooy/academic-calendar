@@ -280,8 +280,8 @@ function isValidSubject(subject, knownIds) {
     isId(subject.id) &&
     !knownIds.has(subject.id) &&
     isNonEmptyText(subject.name, LIMITS.subjectName) &&
-    typeof subject.color === 'string' &&
-    COLOR_PATTERN.test(subject.color) &&
+    (subject.color === undefined ||
+      (typeof subject.color === 'string' && COLOR_PATTERN.test(subject.color))) &&
     (subject.details === undefined || isText(subject.details, LIMITS.subjectDetails))
   );
 }

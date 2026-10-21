@@ -793,7 +793,7 @@ textarea:focus-visible {
   gap: 2.5px;
   text-align: left;
   border: 1px solid var(--event-border);
-  border-left: 4px solid var(--event-color);
+  border-left: 4px solid var(--type-badge-fg, var(--green));
   border-radius: 8px;
   padding: 6px 9px;
   background: var(--event-bg);
@@ -941,7 +941,7 @@ textarea:focus-visible {
 .event.remote {
   background: var(--remote-bg);
   border-color: var(--remote-border);
-  border-left: 4px dashed var(--event-color);
+  border-left: 4px dashed var(--type-badge-fg, var(--green));
   color: var(--text);
 }
 
@@ -949,7 +949,7 @@ textarea:focus-visible {
 .event.custom-event {
   background: var(--custom-bg);
   border-color: var(--custom-border);
-  border-left: 5px solid var(--event-color);
+  border-left: 5px solid var(--accent);
 }
 
 /* Zajęcia odwołane przez godziny / dzień rektorski */

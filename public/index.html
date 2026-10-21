@@ -94,7 +94,6 @@
     <dialog id="eventDetailsDialog">
       <div class="dialoghead">
         <div class="details-title-wrap">
-          <span id="detailsColorDot" class="color-dot"></span>
           <h2 id="detailsSubjectName">Szczegóły zajęć</h2>
         </div>
         <button type="button" data-close aria-label="Zamknij"><i class="ph ph-x"></i></button>
@@ -155,7 +154,7 @@
         </label>
 
         <!-- Widoczne gdy wybrano „Wydarzenie własne / poza przedmiotem” -->
-        <div id="customEventFields" class="pair" hidden>
+        <div id="customEventFields" hidden>
           <label>
             Nazwa wydarzenia / spotkania
             <input
@@ -163,10 +162,6 @@
               maxlength="120"
               placeholder="np. Spotkanie z promotorem, Wizyta u dentysty"
             >
-          </label>
-          <label class="color-label">
-            Kolor
-            <input id="customColor" type="color" value="#b87d3b">
           </label>
         </div>
 
@@ -295,16 +290,10 @@
 
       <form id="subjectForm">
         <input id="subjectId" type="hidden">
-        <div class="pair">
-          <label>
-            Nazwa przedmiotu
-            <input id="subjectName" required maxlength="120" placeholder="np. Metody sztucznej inteligencji">
-          </label>
-          <label class="color-label">
-            Kolor
-            <input id="subjectColor" type="color" value="#397d70">
-          </label>
-        </div>
+        <label>
+          Nazwa przedmiotu
+          <input id="subjectName" required maxlength="120" placeholder="np. Metody sztucznej inteligencji">
+        </label>
         <label>
           Szczegóły przedmiotu (opcjonalnie)
           <textarea
