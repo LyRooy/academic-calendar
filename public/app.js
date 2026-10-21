@@ -783,9 +783,21 @@ function renderEvent(event, layout, gridStartMin, specialDay = null) {
   if (isCustom) className += ' custom-event';
   if (cancelledByRector) className += ' cancelled-by-rector';
   if (durationMin < 20) className += ' compact';
+  else if (durationMin <= 40) className += ' short-block';
+  else if (durationMin <= 55) className += ' medium-block';
+  else className += ' tall-block';
 
   const button = node('button', className);
   button.type = 'button';
+  button.title = [
+    `${event.start} – ${event.end}`,
+    title,
+    event.type,
+    event.room,
+    event.teacher,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   button.style.setProperty('--event-color', color);
   button.style.top = `${topPx}px`;
   button.style.height = `${heightPx}px`;
@@ -815,15 +827,16 @@ function renderEvent(event, layout, gridStartMin, specialDay = null) {
     topRow.append(remoteTag);
   }
 
-  const typeTag = node('span', `type-tag ${typeVisual.variant}`);
-  typeTag.innerHTML = `<i class="ph ${typeVisual.icon}"></i>`;
-  typeTag.append(node('span', '', event.type));
-
-  button.append(topRow, node('span', 'name', title), typeTag);
+  button.append(topRow, node('span', 'name', title));
 
   if (event.room || event.teacher) {
     button.append(node('span', 'meta', [event.room, event.teacher].filter(Boolean).join(' · ')));
   }
+
+  const typeTag = node('span', `type-tag ${typeVisual.variant}`);
+  typeTag.innerHTML = `<i class="ph ${typeVisual.icon}"></i>`;
+  typeTag.append(node('span', '', event.type));
+  button.append(typeTag);
 
   if (overlaps) button.append(node('span', 'meta', '⚠ Nakładające się godziny'));
 
