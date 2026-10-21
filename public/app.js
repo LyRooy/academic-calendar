@@ -197,7 +197,7 @@ function formatDuration(minutes) {
 }
 
 /** Wyznacza zakres godzin siatki tygodnia (zaokrąglony do pełnych godzin). */
-function getGridBounds(weekEvents) {
+function getGridBounds(weekEvents, specialDaysInWeek = []) {
   let startMin = DEFAULT_START_MIN;
   let endMin = DEFAULT_END_MIN;
 
@@ -208,7 +208,92 @@ function getGridBounds(weekEvents) {
     if (end > endMin) endMin = Math.ceil(end / 60) * 60;
   }
 
+  for (const sd of specialDaysInWeek) {
+    if (sd?.type === 'rector' && sd.start && sd.end) {
+      const s = toMinutes(sd.start);
+      const end = toMinutes(sd.end);
+      if (s < startMin) startMin = Math.floor(s / 60) * 60;
+      if (end > endMin) endMin = Math.ceil(end / 60) * 60;
+    }
+  }
+
   return { startMin, endMin };
+}
+
+/** Sprawdza, czy dane zajęcia wypadają w trakcie godzin/dnia rektorskiego. */
+function isEventCancelledByRector(event, specialDay) {
+  if (specialDay?.type !== 'rector') return false;
+  if (!event.subjectId) return false; // Wydarzenia własne (np. dentysta) nie przepadają
+  if (!specialDay.start || !specialDay.end) return true;
+  return (
+    toMinutes(event.start) < toMinutes(specialDay.end) &&
+    toMinutes(event.end) > toMinutes(specialDay.start)
+  );
+}
+
+/** Oblicza wpływ godzin/dnia rektorskiego na plan dnia oraz ile czasu jest wolnego. */
+function describeRectorImpact(dayEvents, specialDay) {
+  const isFullDayRector = !specialDay.start || !specialDay.end;
+  const classEvents = dayEvents.filter((e) => Boolean(e.subjectId));
+  const cancelled = classEvents.filter((e) => isEventCancelledByRector(e, specialDay));
+  const active = classEvents.filter((e) => !isEventCancelledByRector(e, specialDay));
+
+  if (isFullDayRector) {
+    return {
+      fullDayFree: true,
+      cancelledCount: cancelled.length,
+      title: 'Wolny dzień · Dzień rektorski',
+      hoursLabel: 'Cały dzień',
+      freeSummary: cancelled.length
+        ? `Wszystkie zajęcia (${cancelled.length}) odwołane — cały dzień wolny`
+        : 'Cały dzień wolny od zajęć',
+    };
+  }
+
+  const rStart = toMinutes(specialDay.start);
+  const rEnd = toMinutes(specialDay.end);
+  const hoursLabel = `${specialDay.start} – ${specialDay.end} (${formatDuration(rEnd - rStart)})`;
+
+  if (classEvents.length > 0 && active.length === 0) {
+    return {
+      fullDayFree: true,
+      cancelledCount: cancelled.length,
+      title: 'Wolny dzień · Godziny rektorskie',
+      hoursLabel,
+      freeSummary: `Wszystkie zajęcia w tym dniu (${cancelled.length}) przepadają — wolny dzień`,
+    };
+  }
+
+  const before = active.filter((e) => toMinutes(e.end) <= rStart);
+  const after = active.filter((e) => toMinutes(e.start) >= rEnd);
+
+  let freeSummary = '';
+  if (before.length > 0 && after.length > 0) {
+    const freeFrom = Math.max(...before.map((e) => toMinutes(e.end)));
+    const freeUntil = Math.min(...after.map((e) => toMinutes(e.start)));
+    const freeMin = Math.max(0, freeUntil - freeFrom);
+    freeSummary = `Wolne między zajęciami: ${formatDuration(freeMin)} (${fromMinutes(freeFrom)} – ${fromMinutes(freeUntil)})`;
+  } else if (before.length > 0 && after.length === 0) {
+    const freeFrom = Math.max(...before.map((e) => toMinutes(e.end)));
+    freeSummary = cancelled.length
+      ? `Końcowe zajęcia przepadają — wolne od ${fromMinutes(freeFrom)} do końca dnia`
+      : `Wolne od ${fromMinutes(freeFrom)} do końca dnia`;
+  } else if (before.length === 0 && after.length > 0) {
+    const freeUntil = Math.min(...after.map((e) => toMinutes(e.start)));
+    freeSummary = cancelled.length
+      ? `Poranne zajęcia przepadają — wolne do ${fromMinutes(freeUntil)}`
+      : `Wolny poranek — zajęcia od ${fromMinutes(freeUntil)}`;
+  } else {
+    freeSummary = `Wolne: ${formatDuration(rEnd - rStart)} (${specialDay.start} – ${specialDay.end})`;
+  }
+
+  return {
+    fullDayFree: false,
+    cancelledCount: cancelled.length,
+    title: 'Godziny rektorskie',
+    hoursLabel,
+    freeSummary,
+  };
 }
 
 /** Wylicza okienka (wolne przerwy) pomiędzy zajęciami w danym dniu. */
@@ -296,8 +381,12 @@ function renderTimeColumn(gridStartMin, gridEndMin) {
   head.innerHTML = '<i class="ph ph-clock"></i><span>Godz.</span>';
   col.append(head);
 
+  const totalSlots = (gridEndMin - gridStartMin) / SLOT_MINUTES;
   const slots = node('div', 'time-slots');
-  for (let m = gridStartMin; m < gridEndMin; m += SLOT_MINUTES) {
+  slots.style.height = `${totalSlots * SLOT_HEIGHT_PX}px`;
+
+  let slotIndex = 0;
+  for (let m = gridStartMin; m < gridEndMin; m += SLOT_MINUTES, slotIndex++) {
     const isFullHour = m % 60 === 0;
     const isQuarter = m % 15 === 0;
     const label = isFullHour ? fromMinutes(m) : `:${String(m % 60).padStart(2, '0')}`;
@@ -306,11 +395,42 @@ function renderTimeColumn(gridStartMin, gridEndMin) {
       : isQuarter
         ? 'time-slot quarter'
         : 'time-slot five';
-    slots.append(node('div', slotClass, label));
+    const slotEl = node('div', slotClass, label);
+    slotEl.style.top = `${slotIndex * SLOT_HEIGHT_PX}px`;
+    slotEl.style.height = `${SLOT_HEIGHT_PX}px`;
+    slots.append(slotEl);
   }
 
   col.append(slots);
   return col;
+}
+
+/**
+ * Buduje szablon linii 5-minutowych dla kolumny dnia oparty na rzeczywistych
+ * obramowaniach CSS (border-top) i identycznych współrzędnych top jak kolumna
+ * godzin — dzięki temu przy skalowaniu przeglądarki (np. 90%, 80%, 110%) linie
+ * nigdy nie znikają ani nie rozjeżdżają się względem osi godzin i bloków zajęć.
+ */
+function buildTimelineGridTemplate(gridStartMin, gridEndMin) {
+  const grid = node('div', 'timeline-grid');
+  grid.setAttribute('aria-hidden', 'true');
+
+  let slotIndex = 0;
+  for (let m = gridStartMin; m < gridEndMin; m += SLOT_MINUTES, slotIndex++) {
+    const isFullHour = m % 60 === 0;
+    const isQuarter = m % 15 === 0;
+    const slotClass = isFullHour
+      ? 'timeline-slot hour'
+      : isQuarter
+        ? 'timeline-slot quarter'
+        : 'timeline-slot five';
+    const row = node('div', slotClass);
+    row.style.top = `${slotIndex * SLOT_HEIGHT_PX}px`;
+    row.style.height = `${SLOT_HEIGHT_PX}px`;
+    grid.append(row);
+  }
+
+  return grid;
 }
 
 function renderMobileDayTabs(weekEvents, specialDayMap) {
@@ -359,9 +479,14 @@ function render() {
   let weekHasSpecialDay = false;
   let totalGapCount = 0;
   let totalGapMinutes = 0;
+  const weekSpecialDays = [];
   for (let i = 0; i < 7; i++) {
     const d = addDays(week, i);
-    if (specialDayMap.has(d) || holidayFor(d, state.plan.academicYear)) weekHasSpecialDay = true;
+    const eff = specialDayMap.get(d) || holidayFor(d, state.plan.academicYear);
+    if (eff) {
+      weekHasSpecialDay = true;
+      weekSpecialDays.push(eff);
+    }
     const dayEvs = events.filter((e) => e.date === d);
     for (const g of computeGaps(dayEvs)) {
       totalGapCount++;
@@ -376,7 +501,8 @@ function render() {
 
   renderMobileDayTabs(events, specialDayMap);
 
-  const { startMin, endMin } = getGridBounds(events);
+  const { startMin, endMin } = getGridBounds(events, weekSpecialDays);
+  const gridTemplate = buildTimelineGridTemplate(startMin, endMin);
 
   const calendar = $('calendar');
   calendar.classList.toggle('has-special-days', weekHasSpecialDay);
@@ -386,20 +512,22 @@ function render() {
   for (let i = 0; i < 7; i++) {
     const date = addDays(week, i);
     const effectiveSpecial = specialDayMap.get(date) || holidayFor(date, state.plan.academicYear);
-    const dayEl = renderDay(date, DAY_NAMES[i], events, effectiveSpecial, startMin, endMin);
+    const dayEl = renderDay(date, DAY_NAMES[i], events, effectiveSpecial, startMin, endMin, gridTemplate);
     if (i === selectedDayIndex) dayEl.classList.add('mobile-active');
     calendar.append(dayEl);
   }
 }
 
-function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndMin) {
+function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndMin, gridTemplate) {
   const isHoliday = specialDay?.type === 'holiday';
   const isSwap = specialDay?.type === 'swap';
+  const isRector = specialDay?.type === 'rector';
   const canAddInDay = editMode;
 
   let dayClass = 'day';
   if (date === today()) dayClass += ' today';
   if (isHoliday) dayClass += ' holiday';
+  if (isRector) dayClass += ' rector-day';
 
   const day = node('section', dayClass);
 
@@ -423,7 +551,7 @@ function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndM
 
   topWrap.append(head);
 
-  // Oznaczenie dnia specjalnego (święto, weekend lub plan z innego dnia)
+  // Oznaczenie dnia specjalnego (święto, weekend, godziny rektorskie lub plan z innego dnia)
   if (specialDay) {
     const badge = node('div', `special-day-badge ${specialDay.type}`);
     if (isHoliday) {
@@ -434,6 +562,14 @@ function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndM
       const labelSuffix = specialDay.label ? ` · ${specialDay.label}` : '';
       badge.innerHTML = `<i class="ph ph-arrows-clockwise"></i> `;
       badge.append(document.createTextNode(`Plan z ${targetName}${labelSuffix}`));
+    } else if (isRector) {
+      const hoursPart =
+        specialDay.start && specialDay.end
+          ? `Rektorskie ${specialDay.start}–${specialDay.end}`
+          : 'Dzień rektorski';
+      const labelSuffix = specialDay.label ? ` · ${specialDay.label}` : '';
+      badge.innerHTML = `<i class="ph ph-graduation-cap"></i> `;
+      badge.append(document.createTextNode(`${hoursPart}${labelSuffix}`));
     }
     badge.onclick = () => openAcademicYearDialog();
     badge.title = 'Kliknij, aby zarządzać strukturą roku';
@@ -442,9 +578,20 @@ function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndM
 
   day.append(topWrap);
 
+  const dayEvents = weekEvents
+    .filter((e) => e.date === date)
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  const rectorImpact = isRector ? describeRectorImpact(dayEvents, specialDay) : null;
+
   const totalSlots = (gridEndMin - gridStartMin) / SLOT_MINUTES;
-  const timeline = node('div', canAddInDay ? 'day-timeline editable' : 'day-timeline');
+  let timelineClass = canAddInDay ? 'day-timeline editable' : 'day-timeline';
+  if (rectorImpact?.fullDayFree) timelineClass += ' rector-full-free';
+  const timeline = node('div', timelineClass);
   timeline.style.height = `${totalSlots * SLOT_HEIGHT_PX}px`;
+  if (gridTemplate) {
+    timeline.append(gridTemplate.cloneNode(true));
+  }
 
   if (canAddInDay) {
     timeline.title = isHoliday
@@ -458,15 +605,22 @@ function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndM
     };
   }
 
-  const dayEvents = weekEvents
-    .filter((e) => e.date === date)
-    .sort((a, b) => a.start.localeCompare(b.start));
-
   // Renderowanie okienek między zajęciami
   for (const gap of computeGaps(dayEvents)) {
     const topPx = ((gap.startMin - gridStartMin) / SLOT_MINUTES) * SLOT_HEIGHT_PX;
     const heightPx = (gap.durationMin / SLOT_MINUTES) * SLOT_HEIGHT_PX;
-    const gapEl = node('div', 'gap-block');
+    let gapClass = 'gap-block';
+    if (
+      isRector &&
+      (rectorImpact?.fullDayFree ||
+        (specialDay.start &&
+          specialDay.end &&
+          gap.startMin < toMinutes(specialDay.end) &&
+          gap.endMin > toMinutes(specialDay.start)))
+    ) {
+      gapClass += ' cancelled-by-rector';
+    }
+    const gapEl = node('div', gapClass);
     gapEl.style.top = `${topPx}px`;
     gapEl.style.height = `${heightPx}px`;
 
@@ -483,10 +637,41 @@ function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndM
 
   const layoutMap = layoutDayEvents(dayEvents);
   for (const event of dayEvents) {
-    timeline.append(renderEvent(event, layoutMap.get(event.id), gridStartMin));
+    timeline.append(renderEvent(event, layoutMap.get(event.id), gridStartMin, specialDay));
   }
 
-  if (!dayEvents.length) {
+  // Nakładka godzin / dnia rektorskiego
+  if (isRector && rectorImpact) {
+    const overlay = node(
+      'div',
+      rectorImpact.fullDayFree ? 'rector-overlay full-day' : 'rector-overlay partial-day',
+    );
+    if (!rectorImpact.fullDayFree && specialDay.start && specialDay.end) {
+      const rStart = Math.max(gridStartMin, toMinutes(specialDay.start));
+      const rEnd = Math.min(gridEndMin, toMinutes(specialDay.end));
+      const topPx = ((rStart - gridStartMin) / SLOT_MINUTES) * SLOT_HEIGHT_PX;
+      const heightPx = Math.max(SLOT_HEIGHT_PX * 2, ((rEnd - rStart) / SLOT_MINUTES) * SLOT_HEIGHT_PX);
+      overlay.style.top = `${topPx}px`;
+      overlay.style.height = `${heightPx}px`;
+    }
+
+    const card = node('div', 'rector-overlay-card');
+    const titleEl = node('div', 'rector-overlay-title');
+    titleEl.innerHTML = '<i class="ph ph-graduation-cap"></i> ';
+    titleEl.append(document.createTextNode(rectorImpact.title));
+    card.append(titleEl);
+
+    const metaText = specialDay.label
+      ? `${rectorImpact.hoursLabel} · ${specialDay.label}`
+      : rectorImpact.hoursLabel;
+    card.append(node('div', 'rector-overlay-meta', metaText));
+    card.append(node('div', 'rector-overlay-free', rectorImpact.freeSummary));
+
+    overlay.append(card);
+    timeline.append(overlay);
+  }
+
+  if (!dayEvents.length && !isRector) {
     if (editMode) {
       const emptyBtn = node('button', 'day-empty-btn');
       emptyBtn.type = 'button';
@@ -530,18 +715,56 @@ function getEventDisplay(event) {
   };
 }
 
-function renderEvent(event, layout, gridStartMin) {
+function getEventTypeVisual(typeStr, isCustom = false) {
+  const t = (typeStr || '').toLowerCase();
+  if (t.includes('wykład') || t.includes('wyklad')) {
+    return { variant: 'type-lecture', icon: 'ph-chalkboard-teacher' };
+  }
+  if (t.includes('lab')) {
+    return { variant: 'type-lab', icon: 'ph-flask' };
+  }
+  if (t.includes('projekt')) {
+    return { variant: 'type-project', icon: 'ph-kanban' };
+  }
+  if (t.includes('ćwicz') || t.includes('cwicz') || t.includes('lektorat') || t.includes('wf')) {
+    return { variant: 'type-exercise', icon: 'ph-pencil-line' };
+  }
+  if (t.includes('seminarium')) {
+    return { variant: 'type-seminar', icon: 'ph-chats-circle' };
+  }
+  if (t.includes('egzamin') || t.includes('kolokwium') || t.includes('zaliczenie')) {
+    return { variant: 'type-exam', icon: 'ph-warning-octagon' };
+  }
+  if (t.includes('konsultac') || t.includes('promotor') || t.includes('spotkanie')) {
+    return { variant: 'type-consult', icon: 'ph-user-focus' };
+  }
+  if (t.includes('odrabianie')) {
+    return { variant: 'type-makeup', icon: 'ph-clock-clockwise' };
+  }
+  if (t.includes('lekarz') || t.includes('dentyst') || t.includes('prywatn')) {
+    return { variant: 'type-other', icon: 'ph-first-aid-kit' };
+  }
+  return {
+    variant: 'type-other',
+    icon: isCustom ? 'ph-calendar-star' : 'ph-book-open',
+  };
+}
+
+function renderEvent(event, layout, gridStartMin, specialDay = null) {
   const { title, color, isCustom } = getEventDisplay(event);
+  const typeVisual = getEventTypeVisual(event.type, isCustom);
   const startMin = toMinutes(event.start);
   const endMin = toMinutes(event.end);
   const durationMin = Math.max(SLOT_MINUTES, endMin - startMin);
+  const cancelledByRector = isEventCancelledByRector(event, specialDay);
 
   const topPx = ((startMin - gridStartMin) / SLOT_MINUTES) * SLOT_HEIGHT_PX;
   const heightPx = (durationMin / SLOT_MINUTES) * SLOT_HEIGHT_PX;
 
-  let className = 'event';
+  let className = `event ${typeVisual.variant}`;
   if (event.remote) className += ' remote';
   if (isCustom) className += ' custom-event';
+  if (cancelledByRector) className += ' cancelled-by-rector';
   if (durationMin < 20) className += ' compact';
 
   const button = node('button', className);
@@ -559,26 +782,31 @@ function renderEvent(event, layout, gridStartMin) {
   const topRow = node('div', 'event-top-row');
   topRow.append(node('span', 'time', `${event.start} – ${event.end}`));
 
-  if (isCustom || event.remote) {
-    const tagsWrap = node('span', 'event-tags');
-    if (isCustom) {
-      const customTag = node('span', 'custom-tag');
-      customTag.innerHTML = '<i class="ph ph-star-four"></i> Własne';
-      tagsWrap.append(customTag);
-    }
-    if (event.remote) {
-      const remoteTag = node('span', 'remote-tag');
-      remoteTag.innerHTML = '<i class="ph ph-laptop"></i> Zdalnie';
-      tagsWrap.append(remoteTag);
-    }
-    topRow.append(tagsWrap);
-  }
+  const tagsWrap = node('span', 'event-tags');
 
-  button.append(
-    topRow,
-    node('span', 'name', title),
-    node('span', 'type', event.remote ? `${event.type} · Zdalnie` : event.type),
-  );
+  const typeTag = node('span', `type-tag ${typeVisual.variant}`);
+  typeTag.innerHTML = `<i class="ph ${typeVisual.icon}"></i> `;
+  typeTag.append(document.createTextNode(event.type));
+  tagsWrap.append(typeTag);
+
+  if (cancelledByRector) {
+    const rectorTag = node('span', 'rector-tag');
+    rectorTag.innerHTML = '<i class="ph ph-graduation-cap"></i> Odwołane';
+    tagsWrap.append(rectorTag);
+  }
+  if (isCustom) {
+    const customTag = node('span', 'custom-tag');
+    customTag.innerHTML = '<i class="ph ph-star-four"></i> Własne';
+    tagsWrap.append(customTag);
+  }
+  if (event.remote) {
+    const remoteTag = node('span', 'remote-tag');
+    remoteTag.innerHTML = '<i class="ph ph-laptop"></i> Zdalnie';
+    tagsWrap.append(remoteTag);
+  }
+  topRow.append(tagsWrap);
+
+  button.append(topRow, node('span', 'name', title));
 
   if (event.room || event.teacher) {
     button.append(node('span', 'meta', [event.room, event.teacher].filter(Boolean).join(' · ')));
@@ -605,12 +833,14 @@ function openEventDetailsDialog(id) {
   const event = state.plan.events.find((e) => e.id === id);
   if (!event) return;
   const { title, color, isCustom, subject } = getEventDisplay(event);
+  const typeVisual = getEventTypeVisual(event.type, isCustom);
 
   detailsEventId = event.id;
 
   $('detailsColorDot').style.background = color;
   $('detailsSubjectName').textContent = title;
-  $('detailsType').textContent = event.type;
+  $('detailsType').innerHTML = `<i class="ph ${typeVisual.icon}"></i> `;
+  $('detailsType').append(document.createTextNode(event.type));
   $('detailsCustom').hidden = !isCustom;
   $('detailsRemote').hidden = !event.remote;
   $('detailsDate').textContent = formatFullDate(event.date);
@@ -1161,6 +1391,8 @@ function groupSpecialDays(specialDays) {
       type: current.type,
       label: current.label,
       targetDay: current.targetDay,
+      start: current.start,
+      end: current.end,
       startDate: current.date,
       endDate: current.date,
       count: 1,
@@ -1179,7 +1411,7 @@ function renderSpecialDaysList() {
 
   if (!specialDays.length) {
     container.append(
-      node('p', 'hint', 'Brak zdefiniowanych dni wolnych i przerw świątecznych. Dodaj je poniżej.'),
+      node('p', 'hint', 'Brak zdefiniowanych dni wolnych, przerw i godzin rektorskich. Dodaj je poniżej.'),
     );
     return;
   }
@@ -1192,7 +1424,12 @@ function renderSpecialDaysList() {
 
     const dateLine = node('div', 'specialdayrow-date');
     const isRange = group.count > 1;
-    const badgeText = group.type === 'holiday' ? (isRange ? `Przerwa (${group.count} dni)` : 'Wolne') : 'Zamiana';
+    let badgeText = 'Zamiana';
+    if (group.type === 'holiday') {
+      badgeText = isRange ? `Przerwa (${group.count} dni)` : 'Wolne';
+    } else if (group.type === 'rector') {
+      badgeText = group.start && group.end ? `Rektorskie ${group.start}–${group.end}` : 'Dzień rektorski';
+    }
     const badge = node('span', `badge ${group.type}`, badgeText);
 
     const dateRangeStr = isRange ? `${group.startDate} → ${group.endDate}` : group.startDate;
@@ -1203,6 +1440,12 @@ function renderSpecialDaysList() {
       const targetName = DAY_KEY_NAMES[group.targetDay] || group.targetDay;
       const swapDesc = `Zajęcia według planu z ${targetName}`;
       descText = descText ? `${swapDesc} (${descText})` : swapDesc;
+    } else if (group.type === 'rector') {
+      const rectorDesc =
+        group.start && group.end
+          ? `Godziny rektorskie ${group.start} – ${group.end} (nakładka na plan)`
+          : 'Dzień rektorski — cały dzień (nakładka na plan)';
+      descText = group.label ? `${rectorDesc} · ${group.label}` : rectorDesc;
     }
     const desc = node('div', 'specialdayrow-desc', descText);
 
@@ -1224,6 +1467,9 @@ function openAcademicYearDialog() {
   $('specialDayDateEnd').value = addDays(today(), 7);
   $('specialDayLabel').value = '';
   $('specialDayType').value = 'holiday_range';
+  $('rectorFullDay').checked = false;
+  $('rectorStart').value = '10:00';
+  $('rectorEnd').value = '14:00';
   updateSpecialDayTypeFields();
   $('academicYearDialog').showModal();
 }
@@ -1232,10 +1478,16 @@ function updateSpecialDayTypeFields() {
   const type = $('specialDayType').value;
   const isSwap = type === 'swap';
   const isRange = type === 'holiday_range';
+  const isRector = type === 'rector';
+  const fullDayRector = $('rectorFullDay').checked;
 
   $('swapTargetContainer').hidden = !isSwap;
   $('dateEndContainer').hidden = !isRange;
   $('specialDayDateEnd').required = isRange;
+  $('rectorHoursContainer').hidden = !isRector;
+  $('rectorTimePair').hidden = !isRector || fullDayRector;
+  $('rectorStart').required = isRector && !fullDayRector;
+  $('rectorEnd').required = isRector && !fullDayRector;
 
   const dateLabel = $('specialDayDateLabel');
   if (isRange) {
@@ -1266,6 +1518,15 @@ function saveSpecialDay(event) {
     const endDate = $('specialDayDateEnd').value;
     const label = $('specialDayLabel').value.trim();
     const targetDay = type === 'swap' ? $('specialDayTargetDay').value : undefined;
+    const rectorFullDay = $('rectorFullDay').checked;
+    const rectorStart = $('rectorStart').value;
+    const rectorEnd = $('rectorEnd').value;
+
+    if (type === 'rector' && !rectorFullDay) {
+      if (!rectorStart || !rectorEnd || rectorEnd <= rectorStart) {
+        throw Error('Godzina zakończenia godzin rektorskich musi być późniejsza niż godzina rozpoczęcia.');
+      }
+    }
 
     const datesToAdd = [];
 
@@ -1295,9 +1556,18 @@ function saveSpecialDay(event) {
       }
 
       for (const d of datesToAdd) {
-        const item = { date: d, type: type === 'swap' ? 'swap' : 'holiday', label };
-        if (type === 'swap') item.targetDay = targetDay;
-        plan.academicYear.specialDays.push(item);
+        if (type === 'rector') {
+          const item = { date: d, type: 'rector', label };
+          if (!rectorFullDay) {
+            item.start = rectorStart;
+            item.end = rectorEnd;
+          }
+          plan.academicYear.specialDays.push(item);
+        } else {
+          const item = { date: d, type: type === 'swap' ? 'swap' : 'holiday', label };
+          if (type === 'swap') item.targetDay = targetDay;
+          plan.academicYear.specialDays.push(item);
+        }
       }
 
       // Automatycznie dopasuj istniejące serie cykliczne do zaktualizowanej struktury roku
@@ -1563,6 +1833,7 @@ function bindEvents() {
   };
   $('academicYearForm').onsubmit = saveSpecialDay;
   $('specialDayType').onchange = updateSpecialDayTypeFields;
+  $('rectorFullDay').onchange = updateSpecialDayTypeFields;
 
   for (const button of document.querySelectorAll('[data-close]')) {
     button.onclick = () => button.closest('dialog').close();

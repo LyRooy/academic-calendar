@@ -223,6 +223,30 @@ test('reconcileWithAcademicYear dopasowuje istniejące serie i przedmioty obsłu
     customTitle: '',
   });
   assert.throws(() => validatePlan(missingCustomTitle));
+
+  // Godziny / dzień rektorski (nakładka na plan — nie usuwa zajęć z tego dnia)
+  const rectorPlan = samplePlan();
+  rectorPlan.events = [
+    { ...rectorPlan.events[0], id: 'r1', date: '2026-10-14' },
+    { ...rectorPlan.events[0], id: 'r2', date: '2026-10-21' },
+  ];
+  rectorPlan.academicYear = {
+    specialDays: [
+      { date: '2026-10-14', type: 'rector', label: 'Juwenalia', start: '10:00', end: '14:00' },
+      { date: '2026-10-21', type: 'rector', label: 'Dzień rektorski' },
+    ],
+  };
+  validatePlan(rectorPlan);
+  const reconciledRector = reconcileWithAcademicYear(rectorPlan, () => 'unused');
+  assert.equal(reconciledRector.removed, 0);
+  assert.equal(reconciledRector.events.length, 2);
+
+  // Nieprawidłowe godziny rektorskie (end <= start) są odrzucane
+  const badRector = samplePlan();
+  badRector.academicYear = {
+    specialDays: [{ date: '2026-10-14', type: 'rector', label: 'Błąd', start: '14:00', end: '10:00' }],
+  };
+  assert.throws(() => validatePlan(badRector));
 });
 
 // --- API -----------------------------------------------------------------------

@@ -225,8 +225,8 @@ export function reconcileWithAcademicYear(plan, makeId) {
     if (events.length < 2 || !events[0].subjectId) continue;
     events.sort((a, b) => a.date.localeCompare(b.date));
 
-    // Dzień tygodnia serii = najczęstszy dzień wśród spotkań poza dniami specjalnymi.
-    const regular = events.filter((e) => !map.has(e.date));
+    // Dzień tygodnia serii = najczęstszy dzień wśród spotkań poza dniami wolnymi/zamianami.
+    const regular = events.filter((e) => !map.has(e.date) || map.get(e.date)?.type === 'rector');
     if (!regular.length) continue;
     const counts = {};
     for (const e of regular) {
@@ -319,10 +319,16 @@ function isValidEvent(event, knownIds, subjectIds) {
 
 function isValidSpecialDay(sd, knownDates) {
   if (!sd || !validDate(sd.date) || knownDates.has(sd.date)) return false;
-  if (!['holiday', 'swap'].includes(sd.type)) return false;
+  if (!['holiday', 'swap', 'rector'].includes(sd.type)) return false;
   if (!isText(sd.label, LIMITS.dayLabel)) return false;
   if (sd.type === 'swap') {
     if (!sd.targetDay || !DAY_OF_WEEK_PATTERN.test(sd.targetDay)) return false;
+  }
+  if (sd.type === 'rector') {
+    const hasStart = sd.start !== undefined && sd.start !== '';
+    const hasEnd = sd.end !== undefined && sd.end !== '';
+    if (hasStart !== hasEnd) return false;
+    if (hasStart && (!isTime(sd.start) || !isTime(sd.end) || sd.end <= sd.start)) return false;
   }
   return true;
 }

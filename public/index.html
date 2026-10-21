@@ -406,18 +406,19 @@
         </div>
 
         <p class="hint">
-          Zarządzaj dniami wolnymi (święta, dni rektorskie/dziekańskie) oraz dniami, w których zajęcia odbywają się według innego dnia tygodnia (np. środa realizowana według planu z piątku).
+          Zarządzaj przerwami świątecznymi, dniami wolnymi, zamianami dni tygodnia oraz godzinami/dniami rektorskimi (nakładanymi na plan bez kasowania zajęć).
         </p>
 
         <div id="specialDayList"></div>
 
-        <h3 class="dialog-subhead">Dodaj dzień lub przerwę świąteczną</h3>
+        <h3 class="dialog-subhead">Dodaj wpis do struktury roku</h3>
         <div class="pair">
           <label>
             Typ
             <select id="specialDayType">
               <option value="holiday_range">Przerwa świąteczna / okres wolny (od – do)</option>
-              <option value="holiday">Pojedynczy dzień wolny (święto / rektorski)</option>
+              <option value="holiday">Pojedynczy dzień wolny (święto ustawowe)</option>
+              <option value="rector">Godziny / dzień rektorski (nakładka na plan)</option>
               <option value="swap">Zajęcia według innego dnia tygodnia</option>
             </select>
           </label>
@@ -432,6 +433,23 @@
             Data do (włącznie)
             <input id="specialDayDateEnd" type="date" min="2000-01-01" max="2100-12-31">
           </label>
+        </div>
+
+        <div id="rectorHoursContainer" hidden>
+          <label class="checkbox-row">
+            <input type="checkbox" id="rectorFullDay" checked>
+            <span>Cały dzień rektorski (odznacz, aby podać konkretne godziny od – do)</span>
+          </label>
+          <div id="rectorTimePair" class="pair" hidden>
+            <label>
+              Rektorskie od
+              <input id="rectorStart" type="time" value="10:00">
+            </label>
+            <label>
+              Rektorskie do
+              <input id="rectorEnd" type="time" value="14:00">
+            </label>
+          </div>
         </div>
 
         <div id="swapTargetContainer" hidden>

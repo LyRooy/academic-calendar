@@ -399,9 +399,13 @@ textarea:focus-visible {
 
 .time-slots {
   position: relative;
+  width: 100%;
 }
 
 .time-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
   height: var(--slot-height);
   display: flex;
   align-items: center;
@@ -557,32 +561,48 @@ textarea:focus-visible {
   border-top-color: var(--accent);
 }
 
-/* Siatka 5-minutowa dla pojedynczego dnia (12 wierszy po 5 min na godzinę, co 3 wiersze = kwadrans) */
+.special-day-badge.rector {
+  background: #6b7b8e2e;
+  color: var(--text);
+  border-top-color: var(--muted);
+}
+
+/* Siatka 5-minutowa dla pojedynczego dnia — oparta na rzeczywistych liniach border-top
+   o identycznych współrzędnych top jak kolumna godzin, dzięki czemu przy skalowaniu (np. 90%)
+   linie nie znikają ani nie rozjeżdżają się względem godzin i bloków zajęć. */
 .day-timeline {
   position: relative;
   width: 100%;
-  background-image:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent calc(var(--slot-height) * 12 - 1px),
-      var(--grid-hour) calc(var(--slot-height) * 12 - 1px),
-      var(--grid-hour) calc(var(--slot-height) * 12)
-    ),
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent calc(var(--slot-height) * 3 - 1px),
-      var(--grid-quarter) calc(var(--slot-height) * 3 - 1px),
-      var(--grid-quarter) calc(var(--slot-height) * 3)
-    ),
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent calc(var(--slot-height) - 1px),
-      var(--grid-five) calc(var(--slot-height) - 1px),
-      var(--grid-five) var(--slot-height)
-    );
+}
+
+.timeline-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.timeline-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--slot-height);
+}
+
+.timeline-slot.hour {
+  border-top: 1px solid var(--grid-hour);
+}
+
+.timeline-slot.hour:first-child {
+  border-top: none;
+}
+
+.timeline-slot.quarter {
+  border-top: 1px solid var(--grid-quarter);
+}
+
+.timeline-slot.five {
+  border-top: 1px solid var(--grid-five);
 }
 
 .day-timeline.editable {
@@ -674,6 +694,95 @@ textarea:focus-visible {
   line-height: 1.2;
 }
 
+.gap-block.cancelled-by-rector {
+  opacity: 0.25;
+  filter: grayscale(1);
+}
+
+/* Nakładka godzin / dnia rektorskiego (zaszarza okres lub cały dzień na planie) */
+.rector-overlay {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  z-index: 4;
+  pointer-events: none;
+  border-radius: 10px;
+  border: 1.5px dashed var(--muted);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(90, 98, 108, 0.24),
+      rgba(90, 98, 108, 0.24) 9px,
+      rgba(45, 50, 56, 0.34) 9px,
+      rgba(45, 50, 56, 0.34) 18px
+    );
+  backdrop-filter: grayscale(0.85) blur(1px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  overflow: hidden;
+}
+
+.rector-overlay.full-day {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-radius: 0;
+  border: none;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(82, 88, 96, 0.32),
+      rgba(82, 88, 96, 0.32) 10px,
+      rgba(40, 44, 50, 0.44) 10px,
+      rgba(40, 44, 50, 0.44) 20px
+    );
+}
+
+.rector-overlay-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  box-shadow: 0 6px 20px var(--shadow);
+  text-align: center;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rector-overlay-title {
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.rector-overlay-meta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.rector-overlay-free {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--soft);
+  padding: 3px 7px;
+  border-radius: 6px;
+  margin-top: 2px;
+  line-height: 1.3;
+}
+
 /* Pojedyncze zajęcia na osi czasu — wysokość odpowiada czasowi trwania */
 .event {
   position: absolute;
@@ -701,6 +810,135 @@ textarea:focus-visible {
   box-shadow: 0 4px 12px var(--shadow);
 }
 
+/* Tła i akcenty dopasowane do typu zajęć (inne niż Zdalnie i Wydarzenie własne) */
+.event.type-lecture {
+  --type-bg: #eef2fb;
+  --type-border: #c9d5ee;
+  --type-badge-bg: #dce5f8;
+  --type-badge-fg: #2b4c8c;
+  background: var(--type-bg);
+  border-color: var(--type-border);
+}
+
+.event.type-lab {
+  --type-bg: #eaf6f6;
+  --type-border: #bce0e0;
+  --type-badge-bg: #d3efef;
+  --type-badge-fg: #1b6568;
+  background: var(--type-bg);
+  border-color: var(--type-border);
+}
+
+.event.type-project {
+  --type-bg: #f3effb;
+  --type-border: #d5c7ee;
+  --type-badge-bg: #e6dcf8;
+  --type-badge-fg: #58358a;
+  background: var(--type-bg);
+  border-color: var(--type-border);
+}
+
+.event.type-exercise {
+  --type-bg: #edf7ef;
+  --type-border: #c2dec8;
+  --type-badge-bg: #d8efe0;
+  --type-badge-fg: #236339;
+  background: var(--type-bg);
+  border-color: var(--type-border);
+}
+
+.event.type-seminar {
+  --type-bg: #faeff5;
+  --type-border: #e6c6d6;
+  --type-badge-bg: #f3d9e7;
+  --type-badge-fg: #7e2b58;
+  background: var(--type-bg);
+  border-color: var(--type-border);
+}
+
+.event.type-exam {
+  --type-bg: #fdedee;
+  --type-border: #ebbcc0;
+  --type-badge-bg: #fad7da;
+  --type-badge-fg: #94242b;
+  background: var(--type-bg);
+  border-color: var(--type-border);
+}
+
+.event.type-consult {
+  --type-bg: #eef5f9;
+  --type-border: #c4d9e6;
+  --type-badge-bg: #d9eaf4;
+  --type-badge-fg: #265978;
+  background: var(--type-bg);
+  border-color: var(--type-border);
+}
+
+.event.type-makeup {
+  --type-bg: #f4f6ea;
+  --type-border: #d4dcB8;
+  --type-badge-bg: #e6eccf;
+  --type-badge-fg: #4e5d1e;
+  background: var(--type-bg);
+  border-color: var(--type-border);
+}
+
+:root[data-theme="dark"] .event.type-lecture {
+  --type-bg: #182235;
+  --type-border: #2b3e63;
+  --type-badge-bg: #223354;
+  --type-badge-fg: #a8c5ff;
+}
+
+:root[data-theme="dark"] .event.type-lab {
+  --type-bg: #14282b;
+  --type-border: #254b52;
+  --type-badge-bg: #1d3c42;
+  --type-badge-fg: #8ce4ea;
+}
+
+:root[data-theme="dark"] .event.type-project {
+  --type-bg: #221b33;
+  --type-border: #3f3160;
+  --type-badge-bg: #31254d;
+  --type-badge-fg: #cdb4ff;
+}
+
+:root[data-theme="dark"] .event.type-exercise {
+  --type-bg: #16291e;
+  --type-border: #294c38;
+  --type-badge-bg: #203d2c;
+  --type-badge-fg: #9be6b5;
+}
+
+:root[data-theme="dark"] .event.type-seminar {
+  --type-bg: #2b1924;
+  --type-border: #522e44;
+  --type-badge-bg: #402335;
+  --type-badge-fg: #f5add4;
+}
+
+:root[data-theme="dark"] .event.type-exam {
+  --type-bg: #2f181b;
+  --type-border: #5c2c32;
+  --type-badge-bg: #472126;
+  --type-badge-fg: #ffadb3;
+}
+
+:root[data-theme="dark"] .event.type-consult {
+  --type-bg: #16242e;
+  --type-border: #2a4557;
+  --type-badge-bg: #203645;
+  --type-badge-fg: #9dd4f5;
+}
+
+:root[data-theme="dark"] .event.type-makeup {
+  --type-bg: #222616;
+  --type-border: #414a29;
+  --type-badge-bg: #32391f;
+  --type-badge-fg: #d2e396;
+}
+
 /* Zajęcia zdalne (przyciemnione, ale w pełni czytelne) */
 .event.remote {
   background: var(--remote-bg);
@@ -714,6 +952,17 @@ textarea:focus-visible {
   background: var(--custom-bg);
   border-color: var(--custom-border);
   border-left: 5px solid var(--event-color);
+}
+
+/* Zajęcia odwołane przez godziny / dzień rektorski */
+.event.cancelled-by-rector {
+  filter: grayscale(0.9);
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.event.cancelled-by-rector .name {
+  text-decoration: line-through;
 }
 
 .event-top-row {
@@ -730,6 +979,7 @@ textarea:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
   flex-shrink: 0;
 }
 
@@ -740,8 +990,10 @@ textarea:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+.type-tag,
 .remote-tag,
-.custom-tag {
+.custom-tag,
+.rector-tag {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -751,10 +1003,22 @@ textarea:focus-visible {
   letter-spacing: 0.3px;
   padding: 2px 6px;
   border-radius: 4px;
+  background: var(--type-badge-bg, var(--surface));
+  color: var(--type-badge-fg, var(--text));
+  border: 1px solid var(--type-border, var(--line));
+  flex-shrink: 0;
+}
+
+.remote-tag {
   background: var(--surface);
   color: var(--text);
-  border: 1px solid var(--line);
-  flex-shrink: 0;
+  border-color: var(--line);
+}
+
+.rector-tag {
+  background: #6b7b8e33;
+  color: var(--muted);
+  border-color: var(--muted);
 }
 
 .custom-tag {
@@ -1162,6 +1426,12 @@ textarea {
   background: #ceaa6533;
   color: var(--accent);
   border: 1px solid var(--accent);
+}
+
+.badge.rector {
+  background: #6b7b8e33;
+  color: var(--text);
+  border: 1px solid var(--muted);
 }
 
 /* ==========================================================================
