@@ -34,9 +34,9 @@
   --custom-border: #deb473;
   --gap-bg: #e4ebe299;
   --gap-border: #c5d1c3;
-  --grid-five: #eef2eb;
-  --grid-quarter: #dde4d9;
-  --grid-hour: #c2cec0;
+  --grid-five: #dfe7dc;
+  --grid-quarter: #c7d4c3;
+  --grid-hour: #a3b69e;
   --today-border: #5a8d70;
   --slot-height: 15px;
   --head-height: 52px;
@@ -81,9 +81,9 @@
   --custom-border: #7a582b;
   --gap-bg: #15211ecc;
   --gap-border: #314740;
-  --grid-five: #15201d;
-  --grid-quarter: #1f2f2b;
-  --grid-hour: #2e443e;
+  --grid-five: #243631;
+  --grid-quarter: #314942;
+  --grid-hour: #46665d;
   --today-border: #4f9a7a;
 
   --shadow: #00000080;
@@ -424,7 +424,7 @@ textarea:focus-visible {
 .time-slot.five {
   font-size: 8.5px;
   color: var(--faint);
-  border-top: 1px dotted var(--grid-five);
+  border-top: 1px solid var(--grid-five);
 }
 
 /* Kolumna pojedynczego dnia */
