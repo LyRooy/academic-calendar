@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 
-import { emptyPlan, validatePlan, datesFor, monday } from '../public/model.js';
+import { emptyPlan, validatePlan, datesFor, monday, reconcileWithAcademicYear } from '../public/model.js';
 import worker from '../worker.js';
 
 // --- Dane i atrapy -------------------------------------------------------------
@@ -140,17 +140,47 @@ test('datesFor respektuje święta, przerwy i dni z zamianą planu', () => {
   // 2026-10-14 to środa
   // 2026-10-21 (środa) - wolne (święto/przerwa)
   // 2026-10-27 (wtorek) - zamiana: plan ze środy!
-  // 2026-10-28 (środa) - normalna środa
+  // 2026-10-28 (środa) - zamiana: plan z piątku (zajęcia środowe tu NIE wypadają!)
   const academicYear = {
     specialDays: [
       { date: '2026-10-21', type: 'holiday', label: 'Przerwa' },
-      { date: '2026-10-27', type: 'swap', label: 'Środa z wtorku', targetDay: 'wed' },
+      { date: '2026-10-27', type: 'swap', label: 'Środa we wtorek', targetDay: 'wed' },
+      { date: '2026-10-28', type: 'swap', label: 'Piątek w środę', targetDay: 'fri' },
     ],
   };
 
-  const dates = datesFor('2026-10-14', '2026-10-28', 'weekly', '', academicYear, true);
-  // Powinny być: 14 (środa), 27 (wtorek jako środa), 28 (środa). 21 powinno zostać ominięte!
-  assert.deepEqual(dates, ['2026-10-14', '2026-10-27', '2026-10-28']);
+  const dates = datesFor('2026-10-14', '2026-10-30', 'weekly', '', academicYear, true);
+  // Powinny być: 14 (środa) i 27 (wtorek realizujący środę). 21 (wolne) i 28 (środa realizująca piątek) pominięte!
+  assert.deepEqual(dates, ['2026-10-14', '2026-10-27']);
+
+  // Blokada dodania pojedynczych zajęć w dniu wolnym
+  assert.throws(() => datesFor('2026-10-21', '', 'once', '', academicYear, true), /dzień wolny/);
+});
+
+test('reconcileWithAcademicYear dopasowuje istniejące serie i przedmioty obsługują opis details', () => {
+  const plan = samplePlan();
+  plan.subjects[0].details = 'ECTS: 5, Prowadzący: dr Kowalski';
+  plan.events = [
+    { ...plan.events[0], id: 'e1', date: '2026-10-14' },
+    { ...plan.events[0], id: 'e2', date: '2026-10-21' },
+    { ...plan.events[0], id: 'e3', date: '2026-10-28' },
+  ];
+  plan.academicYear = {
+    specialDays: [
+      { date: '2026-10-21', type: 'holiday', label: 'Dzień rektorski' },
+      { date: '2026-10-27', type: 'swap', label: 'Plan ze środy', targetDay: 'wed' },
+    ],
+  };
+
+  validatePlan(plan);
+  let seq = 0;
+  const reconciled = reconcileWithAcademicYear(plan, () => `new_${++seq}`);
+  assert.equal(reconciled.removed, 1);
+  assert.equal(reconciled.added, 1);
+  assert.deepEqual(
+    reconciled.events.map((e) => e.date).sort(),
+    ['2026-10-14', '2026-10-27', '2026-10-28'],
+  );
 });
 
 // --- API -----------------------------------------------------------------------

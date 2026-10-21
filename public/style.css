@@ -97,8 +97,8 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 48px;
-  padding-bottom: 30px;
+  padding-top: 36px;
+  padding-bottom: 24px;
 }
 
 header p {
@@ -111,9 +111,9 @@ main {
 }
 
 h1 {
-  font-size: 42px;
-  letter-spacing: -2px;
-  margin: 9px 0;
+  font-size: 40px;
+  letter-spacing: -1.8px;
+  margin: 0;
 }
 
 h1 span {
@@ -124,6 +124,11 @@ h2 {
   margin: 8px 0;
   font-size: 25px;
   letter-spacing: -0.7px;
+}
+
+h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
 }
 
 p {
@@ -174,6 +179,11 @@ small {
 .pair > label {
   flex: 1;
   min-width: 130px;
+}
+
+.pair > label.color-label {
+  flex: 0 0 auto;
+  min-width: 80px;
 }
 
 /* ==========================================================================
@@ -228,6 +238,16 @@ textarea:focus-visible {
   background: var(--green-hover);
 }
 
+#editModeToggle[aria-pressed="true"] {
+  background: var(--green);
+  color: var(--on-green);
+  border-color: var(--green);
+}
+
+#editModeToggle[aria-pressed="true"]:hover {
+  background: var(--green-hover);
+}
+
 .danger {
   color: var(--danger);
 }
@@ -271,15 +291,28 @@ textarea:focus-visible {
   margin: 0;
 }
 
+.weekbar-actions {
+  align-items: center;
+}
+
 .datejump {
-  font-size: 10px;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--muted);
-  gap: 2px;
-  margin: 0;
+  margin: 0 0 0 4px;
+  white-space: nowrap;
 }
 
 .datejump input {
-  padding: 6px 8px;
+  width: auto;
+  padding: 9px 11px;
+  font-size: 13px;
+  line-height: 1.2;
+  border-radius: 9px;
 }
 
 /* ==========================================================================
@@ -318,13 +351,17 @@ textarea:focus-visible {
   gap: 5px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
-  cursor: pointer;
+  cursor: default;
   background: transparent;
   transition: background 0.15s ease;
   user-select: none;
 }
 
-.dayhead:hover {
+.dayhead.editable {
+  cursor: pointer;
+}
+
+.dayhead.editable:hover {
   background: var(--soft);
 }
 
@@ -361,7 +398,7 @@ textarea:focus-visible {
   opacity: 0.7;
 }
 
-.dayhead:hover .dayhead-add {
+.dayhead.editable:hover .dayhead-add {
   opacity: 1;
 }
 
@@ -426,6 +463,20 @@ textarea:focus-visible {
   border-style: solid;
 }
 
+.day-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  flex: 1;
+  min-height: 80px;
+  color: var(--faint);
+  font-size: 12px;
+  padding: 14px 8px;
+  text-align: center;
+}
+
 /* Pojedyncze zajęcia — kolor paska ustawiany z JS przez --event-color */
 .event {
   display: block;
@@ -479,7 +530,7 @@ dialog {
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 25px;
-  width: min(540px, calc(100% - 24px));
+  width: min(560px, calc(100% - 24px));
   max-height: 90vh;
   box-shadow: 0 22px 80px var(--shadow);
 }
@@ -495,7 +546,8 @@ dialog::backdrop {
 }
 
 .dialoghead h2 {
-  font-size: 23px;
+  font-size: 22px;
+  margin: 0;
 }
 
 .dialoghead button {
@@ -559,6 +611,106 @@ textarea {
   resize: vertical;
 }
 
+/* Okno szczegółów zajęć */
+.details-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.color-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--green);
+}
+
+.details-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.details-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.details-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--green);
+  color: var(--on-green);
+}
+
+.details-badge.subtle {
+  background: var(--soft);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.details-grid > div {
+  background: var(--soft);
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.details-grid dt {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+
+.details-grid dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.details-section {
+  background: var(--soft);
+  padding: 12px 14px;
+  border-radius: 10px;
+}
+
+.details-section h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
+.details-text {
+  margin: 0;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* Lista przedmiotów */
 .subjectrow {
   display: flex;
@@ -568,14 +720,90 @@ textarea {
   border-bottom: 1px solid var(--line);
 }
 
-.subjectrow span {
+.subjectrow-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   flex: 1;
+  min-width: 0;
+}
+
+.subjectrow-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+.subjectrow-details {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .subjectrow button {
   padding: 7px 9px;
   font-size: 12px;
+}
+
+/* Masowe usuwanie i czyszczenie */
+.bulk-section {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+
+.bulk-section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.bulk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+.seriesrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--soft);
+}
+
+.seriesrow-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.seriesrow-title {
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.seriesrow-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.seriesrow button {
+  padding: 6px 10px;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
 /* Lista dni w strukturze roku */

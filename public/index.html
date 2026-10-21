@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#163d36">
-    <title>Plan studenta</title>
+    <title>Plan zajęć</title>
     <script src="theme.js"></script>
     <link rel="stylesheet" href="phosphor/style.css">
     <link rel="stylesheet" href="style.css">
@@ -14,13 +14,16 @@
   <body>
     <header>
       <div>
-        <span class="eyebrow">TWÓJ TYDZIEŃ, PO TWOJEMU</span>
-        <h1>Plan studenta<span>.</span></h1>
-        <p>Jeden przedmiot. Różne zajęcia. Dowolne tygodnie.</p>
+        <h1>Plan zajęć<span>.</span></h1>
       </div>
       <div class="actions header-actions">
         <button type="button" id="themeToggle"><i class="ph ph-circle-half"></i> Auto</button>
-        <button type="button" id="addEvent" class="primary"><i class="ph ph-plus"></i> Dodaj zajęcia</button>
+        <button type="button" id="editModeToggle" aria-pressed="false">
+          <i class="ph ph-pencil-simple"></i> Tryb edycji: Wył.
+        </button>
+        <button type="button" id="addEvent" class="primary" hidden>
+          <i class="ph ph-plus"></i> Dodaj zajęcia
+        </button>
       </div>
     </header>
 
@@ -30,6 +33,7 @@
         <div class="actions">
           <button type="button" id="subjects"><i class="ph ph-book-open"></i> Przedmioty</button>
           <button type="button" id="academicYearBtn"><i class="ph ph-calendar-blank"></i> Struktura roku</button>
+          <button type="button" id="bulkManageBtn"><i class="ph ph-trash"></i> Masowe usuwanie / reset</button>
           <button type="button" id="export"><i class="ph ph-export"></i> Eksport JSON</button>
           <button type="button" id="importButton"><i class="ph ph-download-simple"></i> Import JSON</button>
           <input type="file" id="import" accept="application/json,.json" hidden>
@@ -50,12 +54,12 @@
           <h2 id="weekTitle"></h2>
           <p id="summary"></p>
         </div>
-        <div class="actions">
+        <div class="actions weekbar-actions">
           <button type="button" id="prev" aria-label="Poprzedni tydzień"><i class="ph ph-arrow-left"></i></button>
           <button type="button" id="today"><i class="ph ph-calendar-check"></i> Dzisiaj</button>
           <button type="button" id="next" aria-label="Następny tydzień"><i class="ph ph-arrow-right"></i></button>
           <label class="datejump">
-            Przejdź do
+            <span>Przejdź do</span>
             <input type="date" id="jump">
           </label>
         </div>
@@ -63,11 +67,59 @@
 
       <div id="calendar" class="calendar"></div>
 
-      <p class="hint">
-        Kliknij nagłówek dnia lub pusty dzień, aby dodać zajęcia w tym dniu. Kliknij zajęcia, żeby zmienić termin, salę lub usunąć spotkanie.
-        W zakładce „Struktura roku” zdefiniujesz święta, dni rektorskie oraz dni z planem według innego dnia tygodnia.
+      <p id="calendarHint" class="hint">
+        Kliknij zajęcia, aby zobaczyć szczegóły przedmiotu i spotkania. Włącz „Tryb edycji” u góry, aby dodawać lub zmieniać zajęcia w kalendarzu.
       </p>
     </main>
+
+    <!-- Okno: szczegóły zajęć (w trybie normalnym) -->
+    <dialog id="eventDetailsDialog">
+      <div class="dialoghead">
+        <div class="details-title-wrap">
+          <span id="detailsColorDot" class="color-dot"></span>
+          <h2 id="detailsSubjectName">Szczegóły zajęć</h2>
+        </div>
+        <button type="button" data-close aria-label="Zamknij"><i class="ph ph-x"></i></button>
+      </div>
+
+      <div class="details-body">
+        <div class="details-badges">
+          <span id="detailsType" class="details-badge"></span>
+          <span id="detailsDate" class="details-badge subtle"></span>
+          <span id="detailsTime" class="details-badge subtle"></span>
+        </div>
+
+        <dl class="details-grid">
+          <div id="detailsRoomRow">
+            <dt><i class="ph ph-door-open"></i> Sala</dt>
+            <dd id="detailsRoom"></dd>
+          </div>
+          <div id="detailsTeacherRow">
+            <dt><i class="ph ph-chalkboard-teacher"></i> Prowadzący</dt>
+            <dd id="detailsTeacher"></dd>
+          </div>
+        </dl>
+
+        <div id="detailsNotesSection" class="details-section" hidden>
+          <h3>Notatka do tego spotkania</h3>
+          <p id="detailsNotes" class="details-text"></p>
+        </div>
+
+        <div id="detailsSubjectSection" class="details-section" hidden>
+          <h3>Szczegóły przedmiotu</h3>
+          <p id="detailsSubjectInfo" class="details-text"></p>
+        </div>
+      </div>
+
+      <div class="dialogfoot">
+        <button type="button" id="detailsEditSubjectBtn">
+          <i class="ph ph-book-open"></i> Edytuj opis przedmiotu
+        </button>
+        <button type="button" id="detailsEditEventBtn" class="primary">
+          <i class="ph ph-pencil-simple"></i> Edytuj zajęcia
+        </button>
+      </div>
+    </dialog>
 
     <!-- Okno: dodawanie / edycja zajęć -->
     <dialog id="eventDialog">
@@ -81,7 +133,7 @@
           Przedmiot
           <select id="subject" required></select>
         </label>
-        <p class="hint">Nowy przedmiot dodasz w przycisku „Przedmioty”.</p>
+        <p class="hint">Nowy przedmiot oraz jego opis dodasz w przycisku „Przedmioty”.</p>
 
         <div class="pair">
           <label>
@@ -161,13 +213,14 @@
           <select id="scope">
             <option value="one">Tylko to jedno wybrane spotkanie</option>
             <option value="future">To i wszystkie kolejne spotkania tej serii</option>
+            <option value="all">Cała seria (wszystkie tygodnie i przeniesione dni)</option>
           </select>
-          <small id="scopeHelp">Wybierz „Tylko to jedno spotkanie”, jeśli chcesz usunąć odwołane zajęcia lub zmienić salę/godzinę tylko w tym jednym dniu.</small>
+          <small id="scopeHelp">Wybierz „Tylko to jedno spotkanie”, jeśli chcesz usunąć pojedyncze odwołane zajęcia, lub „Cała seria”, aby usunąć wszystkie powtórzenia razem z przeniesionymi dniami.</small>
         </label>
 
         <label>
           Notatka
-          <textarea id="notes" maxlength="2000" placeholder="Co warto przygotować?"></textarea>
+          <textarea id="notes" maxlength="2000" placeholder="Co warto przygotować na te zajęcia?"></textarea>
         </label>
 
         <p id="eventError" class="error" role="alert"></p>
@@ -190,13 +243,24 @@
 
       <form id="subjectForm">
         <input id="subjectId" type="hidden">
+        <div class="pair">
+          <label>
+            Nazwa przedmiotu
+            <input id="subjectName" required maxlength="120" placeholder="np. Metody sztucznej inteligencji">
+          </label>
+          <label class="color-label">
+            Kolor
+            <input id="subjectColor" type="color" value="#397d70">
+          </label>
+        </div>
         <label>
-          Nazwa przedmiotu
-          <input id="subjectName" required maxlength="120" placeholder="np. Metody sztucznej inteligencji">
-        </label>
-        <label>
-          Kolor
-          <input id="subjectColor" type="color" value="#397d70">
+          Szczegóły przedmiotu (opcjonalnie)
+          <textarea
+            id="subjectDetails"
+            maxlength="2000"
+            placeholder="np. Prowadzący, zasady zaliczenia, punkty ECTS, literatura, link do kursu / Teams..."
+          ></textarea>
+          <small>Te informacje zobaczysz po kliknięciu zajęć w normalnym trybie przeglądania.</small>
         </label>
 
         <p id="subjectError" class="error" role="alert"></p>
@@ -206,6 +270,45 @@
           <button type="button" id="newSubject">Nowy / wyczyść</button>
         </div>
       </form>
+    </dialog>
+
+    <!-- Okno: masowe usuwanie serii i czyszczenie kalendarza -->
+    <dialog id="bulkDialog">
+      <div class="dialoghead">
+        <h2>Masowe usuwanie i czyszczenie</h2>
+        <button type="button" data-close aria-label="Zamknij"><i class="ph ph-x"></i></button>
+      </div>
+
+      <div class="bulk-section">
+        <h3>1. Dopasuj istniejące zajęcia do struktury roku</h3>
+        <p class="hint">
+          Jeśli dodałeś przerwę świąteczną, dzień wolny lub zamianę dni tygodnia po utworzeniu zajęć,
+          ta opcja usunie zajęcia cykliczne z dni wolnych i przeniesie je na dni ze zmienionym planem.
+        </p>
+        <button type="button" id="reconcileBtn">
+          <i class="ph ph-arrows-clockwise"></i> Przelicz istniejące serie wg struktury roku
+        </button>
+      </div>
+
+      <div class="bulk-section">
+        <h3>2. Usuń wybraną serię zajęć (wszystkie tygodnie i przesunięte dni)</h3>
+        <div id="seriesList" class="bulk-list"></div>
+      </div>
+
+      <div class="bulk-section">
+        <h3>3. Wyczyść kalendarz</h3>
+        <p class="hint">
+          Po wyczyszczeniu kliknij „Zapisz w chmurze” na pasku narzędzi, aby nadpisać i wyczyścić również plan w chmurze Cloudflare R2.
+        </p>
+        <div class="actions">
+          <button type="button" id="clearEventsBtn" class="danger">
+            <i class="ph ph-calendar-x"></i> Usuń wszystkie zajęcia (zostaw przedmioty i strukturę roku)
+          </button>
+          <button type="button" id="clearAllBtn" class="danger">
+            <i class="ph ph-trash"></i> Wyczyść cały kalendarz do zera
+          </button>
+        </div>
+      </div>
     </dialog>
 
     <!-- Okno: klucz dostępu do chmury -->

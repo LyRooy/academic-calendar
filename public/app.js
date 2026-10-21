@@ -1,7 +1,15 @@
-// Logika interfejsu: renderowanie tygodnia, formularze, zapis lokalny (localStorage)
-// oraz ręczna synchronizacja z Workerem Cloudflare (/api/plan).
+// Logika interfejsu: renderowanie tygodnia, tryb przeglądania i edycji,
+// formularze, zapis lokalny (localStorage) oraz synchronizacja z Workerem Cloudflare (/api/plan).
 
-import { emptyPlan, validatePlan, datesFor, addDays, monday } from './model.js';
+import {
+  emptyPlan,
+  validatePlan,
+  datesFor,
+  addDays,
+  monday,
+  holidayFor,
+  reconcileWithAcademicYear,
+} from './model.js';
 
 // --- Stałe i stan ------------------------------------------------------------
 
@@ -18,7 +26,9 @@ let state = { plan: emptyPlan(), etag: null, dirty: false };
 let lastStored = null;       // ostatnia wartość zapisana przez tę kartę (wykrywanie innych kart)
 let storageBlocked = false;  // localStorage niedostępny lub zmieniony przez inną kartę
 let busy = false;            // trwa synchronizacja
+let editMode = false;        // false = normalny tryb przeglądania, true = tryb edycji
 let editingId = null;        // id edytowanych zajęć (null = nowe)
+let detailsEventId = null;   // id zajęć aktualnie wyświetlanych w oknie szczegółów
 let week = monday(today());  // poniedziałek wyświetlanego tygodnia
 
 // --- Narzędzia ---------------------------------------------------------------
@@ -45,7 +55,14 @@ function node(tag, className, text) {
 }
 
 const dayMonthFormat = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'long' });
+const fullDateFormat = new Intl.DateTimeFormat('pl-PL', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
 const formatDate = (date) => dayMonthFormat.format(new Date(date + 'T12:00:00Z'));
+const formatFullDate = (date) => fullDateFormat.format(new Date(date + 'T12:00:00Z'));
 
 const toMinutes = (time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
 
@@ -59,10 +76,28 @@ function reportState() {
   if (storageBlocked) {
     setStatus('Nie można bezpiecznie zapisać danych lokalnych. Wyeksportuj plan i sprawdź pamięć przeglądarki.');
   } else if (state.dirty) {
-    setStatus('Masz lokalne zmiany · Zapisz w chmurze, aby udostępnić je na innych urządzeniach.');
+    setStatus('Masz lokalne zmiany · Kliknij „Zapisz w chmurze”, aby nadpisać plan w chmurze i udostępnić go na innych urządzeniach.');
   } else {
     setStatus('Plan zapisany lokalnie · Pobierz z chmury, aby sprawdzić aktualną wersję.');
   }
+}
+
+// --- Tryb przeglądania vs. Tryb edycji ---------------------------------------
+
+function setEditMode(enabled) {
+  editMode = !!enabled;
+  const toggle = $('editModeToggle');
+  toggle.setAttribute('aria-pressed', String(editMode));
+  toggle.innerHTML = editMode
+    ? '<i class="ph ph-pencil-simple-line"></i> Tryb edycji: Wł.'
+    : '<i class="ph ph-pencil-simple"></i> Tryb edycji: Wył.';
+
+  $('addEvent').hidden = !editMode;
+  $('calendarHint').textContent = editMode
+    ? 'Tryb edycji aktywny: kliknij nagłówek dnia lub pusty dzień (poza dniami wolnymi), aby dodać zajęcia. Kliknij istniejące zajęcia, aby je edytować lub usunąć.'
+    : 'Kliknij zajęcia, aby zobaczyć szczegóły przedmiotu i spotkania. Włącz „Tryb edycji” u góry, aby dodawać lub zmieniać zajęcia w kalendarzu.';
+
+  render();
 }
 
 // --- Zapis lokalny -----------------------------------------------------------
@@ -110,7 +145,6 @@ function mutate(change) {
 }
 
 // Mapowanie dni tygodnia na klucze
-const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_KEY_NAMES = {
   mon: 'poniedziałku',
   tue: 'wtorku',
@@ -147,6 +181,7 @@ function render() {
 function renderDay(date, dayName, weekEvents, specialDay) {
   const isHoliday = specialDay?.type === 'holiday';
   const isSwap = specialDay?.type === 'swap';
+  const canAddInDay = editMode && !isHoliday;
 
   let dayClass = 'day';
   if (date === today()) dayClass += ' today';
@@ -154,35 +189,39 @@ function renderDay(date, dayName, weekEvents, specialDay) {
 
   const day = node('section', dayClass);
 
-  // Nagłówek dnia jest klikalny — pozwala błyskawicznie dodać zajęcia dla tego dnia
-  const head = node('div', 'dayhead');
-  head.title = `Kliknij, aby dodać zajęcia w dniu ${date} (${dayName})`;
-  head.onclick = (e) => {
-    // Nie otwieraj, jeśli kliknięto w coś innego
-    openEventDialog(null, date);
-  };
-
+  const head = node('div', canAddInDay ? 'dayhead editable' : 'dayhead');
   const headInfo = node('div', 'dayhead-info');
   headInfo.append(node('span', '', dayName), node('strong', '', date.slice(8)));
+  head.append(headInfo);
 
-  const addHint = node('span', 'dayhead-add');
-  addHint.innerHTML = '<i class="ph ph-plus"></i>';
-  addHint.title = 'Dodaj zajęcia w tym dniu';
-  head.append(headInfo, addHint);
+  if (canAddInDay) {
+    head.title = `Kliknij, aby dodać zajęcia w dniu ${date} (${dayName})`;
+    head.onclick = () => openEventDialog(null, date);
+
+    const addHint = node('span', 'dayhead-add');
+    addHint.innerHTML = '<i class="ph ph-plus"></i>';
+    addHint.title = 'Dodaj zajęcia w tym dniu';
+    head.append(addHint);
+  } else if (editMode && isHoliday) {
+    head.title = 'Dzień wolny od zajęć — dodawanie zajęć zablokowane';
+  }
+
   day.append(head);
 
   // Oznaczenie dnia specjalnego (święto lub plan z innego dnia)
   if (specialDay) {
     const badge = node('div', `special-day-badge ${specialDay.type}`);
     if (isHoliday) {
-      badge.innerHTML = `<i class="ph ph-sun-horizon"></i> ${specialDay.label || 'Dzień wolny'}`;
+      badge.innerHTML = `<i class="ph ph-sun-horizon"></i> `;
+      badge.append(document.createTextNode(specialDay.label || 'Dzień wolny'));
     } else if (isSwap) {
       const targetName = DAY_KEY_NAMES[specialDay.targetDay] || specialDay.targetDay;
       const labelSuffix = specialDay.label ? ` · ${specialDay.label}` : '';
-      badge.innerHTML = `<i class="ph ph-arrows-clockwise"></i> Plan z ${targetName}${labelSuffix}`;
+      badge.innerHTML = `<i class="ph ph-arrows-clockwise"></i> `;
+      badge.append(document.createTextNode(`Plan z ${targetName}${labelSuffix}`));
     }
     badge.onclick = () => openAcademicYearDialog();
-    badge.title = 'Kliknij, aby edytować strukturę roku';
+    badge.title = 'Kliknij, aby zarządzać strukturą roku';
     day.append(badge);
   }
 
@@ -194,13 +233,20 @@ function renderDay(date, dayName, weekEvents, specialDay) {
   for (const event of dayEvents) list.append(renderEvent(event, dayEvents));
 
   if (!dayEvents.length) {
-    const emptyBtn = node('button', 'day-empty-btn');
-    emptyBtn.type = 'button';
-    emptyBtn.innerHTML = isHoliday
-      ? '<i class="ph ph-sun-horizon"></i> Dzień wolny od zajęć'
-      : '<i class="ph ph-plus-circle"></i> Dodaj zajęcia';
-    emptyBtn.onclick = () => openEventDialog(null, date);
-    list.append(emptyBtn);
+    if (isHoliday) {
+      const emptyHoliday = node('div', 'day-empty-state');
+      emptyHoliday.innerHTML = '<i class="ph ph-sun-horizon"></i> Dzień wolny od zajęć';
+      list.append(emptyHoliday);
+    } else if (editMode) {
+      const emptyBtn = node('button', 'day-empty-btn');
+      emptyBtn.type = 'button';
+      emptyBtn.innerHTML = '<i class="ph ph-plus-circle"></i> Dodaj zajęcia';
+      emptyBtn.onclick = () => openEventDialog(null, date);
+      list.append(emptyBtn);
+    } else {
+      const emptyNormal = node('div', 'day-empty-state', 'Brak zajęć');
+      list.append(emptyNormal);
+    }
   }
 
   day.append(list);
@@ -210,6 +256,7 @@ function renderDay(date, dayName, weekEvents, specialDay) {
 function renderEvent(event, dayEvents) {
   const subject = state.plan.subjects.find((s) => s.id === event.subjectId);
   const button = node('button', 'event');
+  button.type = 'button';
   button.style.setProperty('--event-color', subject.color);
 
   button.append(
@@ -229,11 +276,60 @@ function renderEvent(event, dayEvents) {
 
   if (event.notes) button.append(node('span', 'meta', event.notes));
 
-  button.onclick = () => openEventDialog(event.id);
+  button.onclick = () => {
+    if (editMode) {
+      openEventDialog(event.id);
+    } else {
+      openEventDetailsDialog(event.id);
+    }
+  };
   return button;
 }
 
+// --- Szczegóły zajęć (w trybie przeglądania) ---------------------------------
+
+function openEventDetailsDialog(id) {
+  const event = state.plan.events.find((e) => e.id === id);
+  if (!event) return;
+  const subject = state.plan.subjects.find((s) => s.id === event.subjectId);
+  if (!subject) return;
+
+  detailsEventId = event.id;
+
+  $('detailsColorDot').style.background = subject.color;
+  $('detailsSubjectName').textContent = subject.name;
+  $('detailsType').textContent = event.type;
+  $('detailsDate').textContent = formatFullDate(event.date);
+  $('detailsTime').textContent = `${event.start} – ${event.end}`;
+
+  $('detailsRoom').textContent = event.room || 'Nie podano';
+  $('detailsTeacher').textContent = event.teacher || 'Nie podano';
+
+  const hasNotes = !!event.notes?.trim();
+  $('detailsNotesSection').hidden = !hasNotes;
+  $('detailsNotes').textContent = event.notes || '';
+
+  const hasSubjectDetails = !!subject.details?.trim();
+  $('detailsSubjectSection').hidden = !setSubjectDetailsContent(subject.details);
+
+  $('eventDetailsDialog').showModal();
+}
+
+function setSubjectDetailsContent(details) {
+  const text = (details || '').trim();
+  $('detailsSubjectInfo').textContent = text || 'Brak opisu przedmiotu. Możesz go dodać przyciskiem „Edytuj opis przedmiotu”.';
+  return true;
+}
+
 // --- Przedmioty --------------------------------------------------------------
+
+function fillSubjectForm(subject) {
+  $('subjectId').value = subject.id;
+  $('subjectName').value = subject.name;
+  $('subjectColor').value = subject.color;
+  $('subjectDetails').value = subject.details || '';
+  $('subjectError').textContent = '';
+}
 
 function renderSubjectList() {
   const list = $('subjectList');
@@ -241,25 +337,35 @@ function renderSubjectList() {
 
   for (const subject of state.plan.subjects) {
     const row = node('div', 'subjectrow');
+
+    const info = node('div', 'subjectrow-info');
+    const nameRow = node('div', 'subjectrow-name');
+    const dot = node('span', 'color-dot');
+    dot.style.background = subject.color;
+    nameRow.append(dot, node('span', '', subject.name));
+    info.append(nameRow);
+
+    if (subject.details) {
+      info.append(node('div', 'subjectrow-details', subject.details));
+    }
+
     const editButton = node('button', '', 'Edytuj');
+    editButton.type = 'button';
     const deleteButton = node('button', 'danger', 'Usuń');
+    deleteButton.type = 'button';
 
-    editButton.onclick = () => {
-      $('subjectId').value = subject.id;
-      $('subjectName').value = subject.name;
-      $('subjectColor').value = subject.color;
-      $('subjectError').textContent = '';
-    };
-
+    editButton.onclick = () => fillSubjectForm(subject);
     deleteButton.onclick = () => deleteSubject(subject);
 
-    row.append(node('span', '', subject.name), editButton, deleteButton);
+    row.append(info, editButton, deleteButton);
     list.append(row);
   }
 }
 
-function openSubjectDialog(message = '') {
+function openSubjectDialog(message = '', subjectToEdit = null) {
   renderSubjectList();
+  resetSubjectForm();
+  if (subjectToEdit) fillSubjectForm(subjectToEdit);
   $('subjectError').textContent = message;
   $('subjectDialog').showModal();
 }
@@ -267,16 +373,26 @@ function openSubjectDialog(message = '') {
 function resetSubjectForm() {
   $('subjectForm').reset();
   $('subjectId').value = '';
+  $('subjectDetails').value = '';
 }
 
 function deleteSubject(subject) {
   try {
-    if (state.plan.events.some((e) => e.subjectId === subject.id)) {
-      throw Error('Najpierw usuń zajęcia tego przedmiotu.');
+    const subjectEventsCount = state.plan.events.filter((e) => e.subjectId === subject.id).length;
+    if (subjectEventsCount > 0) {
+      if (
+        !confirm(
+          `Przedmiot „${subject.name}” ma przypisane zajęcia (${subjectEventsCount} spotkań). Czy usunąć ten przedmiot razem ze wszystkimi jego zajęciami?`,
+        )
+      ) {
+        return;
+      }
+    } else if (!confirm(`Usunąć przedmiot „${subject.name}”?`)) {
+      return;
     }
-    if (!confirm(`Usunąć przedmiot „${subject.name}”?`)) return;
 
     mutate((plan) => {
+      plan.events = plan.events.filter((e) => e.subjectId !== subject.id);
       plan.subjects = plan.subjects.filter((s) => s.id !== subject.id);
     });
     resetSubjectForm();
@@ -292,6 +408,7 @@ function saveSubject(event) {
     const name = $('subjectName').value.trim();
     const id = $('subjectId').value || uid();
     const color = $('subjectColor').value;
+    const details = $('subjectDetails').value.trim();
 
     mutate((plan) => {
       const duplicate = plan.subjects.find(
@@ -299,7 +416,7 @@ function saveSubject(event) {
       );
       if (duplicate) throw Error('Taki przedmiot już istnieje. Dodaj do niego inny typ zajęć.');
 
-      const subject = { id, name, color };
+      const subject = details ? { id, name, color, details } : { id, name, color };
       const index = plan.subjects.findIndex((s) => s.id === id);
       if (index < 0) plan.subjects.push(subject);
       else plan.subjects[index] = subject;
@@ -317,8 +434,26 @@ function saveSubject(event) {
 
 const EVENT_FIELDS = ['type', 'start', 'end', 'room', 'teacher', 'notes'];
 
+function findDefaultNonHolidayDate(preferredDate) {
+  if (!holidayFor(preferredDate, state.plan.academicYear)) return preferredDate;
+  for (let i = 0; i < 7; i++) {
+    const candidate = addDays(week, i);
+    if (!holidayFor(candidate, state.plan.academicYear)) return candidate;
+  }
+  return preferredDate;
+}
+
 function openEventDialog(id, initialDate = null) {
   if (busy) return;
+
+  if (!id && initialDate) {
+    const holiday = holidayFor(initialDate, state.plan.academicYear);
+    if (holiday) {
+      const reason = holiday.label ? ` (${holiday.label})` : '';
+      setStatus(`Dzień ${initialDate} jest ustawiony jako wolny${reason} — dodawanie zajęć w tym dniu jest zablokowane.`);
+      return;
+    }
+  }
 
   if (!state.plan.subjects.length) {
     openSubjectDialog('Najpierw dodaj przedmiot, a następnie jego zajęcia.');
@@ -345,15 +480,18 @@ function openEventDialog(id, initialDate = null) {
   $('deleteEvent').hidden = !event;
   $('untilLabel').hidden = true;
   $('manualLabel').hidden = true;
+  $('applyAcademicYearLabel').hidden = true;
   $('until').required = false;
 
   const t = today();
   const todayInWeek = t >= week && t <= addDays(week, 6);
-  $('date').value = event?.date || initialDate || (todayInWeek ? t : week);
+  const fallbackDate = findDefaultNonHolidayDate(todayInWeek ? t : week);
+  $('date').value = event?.date || initialDate || fallbackDate;
 
   if (event) {
     for (const field of EVENT_FIELDS) $(field).value = event[field];
     select.value = event.subjectId;
+    $('scope').value = 'one';
   }
 
   $('eventDialog').showModal();
@@ -381,10 +519,17 @@ function readEventForm() {
   };
 }
 
-/** Czy zajęcia `e` należą do zakresu zmiany (to spotkanie lub to i kolejne z serii). */
+/**
+ * Czy zajęcia `e` należą do wybranego zakresu edycji/usuwania:
+ *  - 'one'    → tylko to jedno spotkanie,
+ *  - 'future' → to i wszystkie kolejne spotkania z tej samej serii,
+ *  - 'all'    → cała seria (wszystkie tygodnie oraz dni przeniesione).
+ */
 function inScope(e, original, scope) {
   if (e.id === original.id) return true;
-  return scope === 'future' && e.seriesId === original.seriesId && e.date >= original.date;
+  if (scope === 'all') return e.seriesId === original.seriesId;
+  if (scope === 'future') return e.seriesId === original.seriesId && e.date >= original.date;
+  return false;
 }
 
 function saveEvent(submitEvent) {
@@ -401,18 +546,43 @@ function saveEvent(submitEvent) {
       if (editingId) {
         const original = plan.events.find((e) => e.id === editingId);
         const scope = $('scope').value;
-        // Przesunięcie daty (w dniach) stosujemy do każdego spotkania z zakresu.
         const shiftDays = Math.round((Date.parse(values.date) - Date.parse(original.date)) / 86_400_000);
 
-        plan.events = plan.events.map((e) =>
-          inScope(e, original, scope) ? { ...e, ...values, date: addDays(e.date, shiftDays) } : e,
-        );
+        if (shiftDays !== 0) {
+          const targetHoliday = holidayFor(values.date, plan.academicYear);
+          if (targetHoliday) {
+            const reason = targetHoliday.label ? ` (${targetHoliday.label})` : '';
+            throw Error(`${values.date} to dzień wolny${reason}. Nie można przenieść zajęć na dzień wolny.`);
+          }
+        }
+
+        plan.events = plan.events.map((e) => {
+          if (!inScope(e, original, scope)) return e;
+          const nextDate = addDays(e.date, shiftDays);
+          // Jeśli przesuwamy serię i któryś z docelowych dni jest dniem wolnym, pomijamy przesunięcie na dzień wolny
+          if (shiftDays !== 0 && holidayFor(nextDate, plan.academicYear)) {
+            return null;
+          }
+          return { ...e, ...values, date: nextDate };
+        }).filter(Boolean);
       } else {
+        const repeatMode = $('repeat').value;
+        // Blokada rozpoczęcia powtarzania lub pojedynczych zajęć w dniu ustawionym jako wolny
+        if (applyAcademicYear) {
+          const startHoliday = holidayFor(values.date, plan.academicYear);
+          if (startHoliday) {
+            const reason = startHoliday.label ? ` (${startHoliday.label})` : '';
+            throw Error(
+              `Wybrany dzień (${values.date}) jest ustawiony jako wolny${reason}. Wybierz dzień, w którym odbywają się zajęcia.`,
+            );
+          }
+        }
+
         const seriesId = uid();
         const dates = datesFor(
           values.date,
           $('until').value,
-          $('repeat').value,
+          repeatMode,
           $('manual').value,
           plan.academicYear,
           applyAcademicYear,
@@ -430,17 +600,19 @@ function saveEvent(submitEvent) {
 }
 
 function deleteEvent() {
-  const isSingle = $('scope').value === 'one';
-  const confirmMsg = isSingle
-    ? 'Czy na pewno usunąć tylko to jedno spotkanie z planu?'
-    : 'Czy na pewno usunąć to i wszystkie kolejne spotkania tej serii?';
+  const scope = $('scope').value;
+  let confirmMsg = 'Czy na pewno usunąć tylko to jedno spotkanie z planu?';
+  if (scope === 'future') {
+    confirmMsg = 'Czy na pewno usunąć to i wszystkie kolejne spotkania tej serii?';
+  } else if (scope === 'all') {
+    confirmMsg = 'Czy na pewno usunąć CAŁĄ serię zajęć (ze wszystkich tygodni oraz przeniesionych dni)?';
+  }
 
   if (!confirm(confirmMsg)) return;
 
   try {
     mutate((plan) => {
       const original = plan.events.find((e) => e.id === editingId);
-      const scope = $('scope').value;
       plan.events = plan.events.filter((e) => !inScope(e, original, scope));
     });
     $('eventDialog').close();
@@ -449,6 +621,125 @@ function deleteEvent() {
   }
 }
 
+// --- Masowe usuwanie serii i czyszczenie kalendarza --------------------------
+
+function renderSeriesList() {
+  const container = $('seriesList');
+  container.replaceChildren();
+
+  if (!state.plan.events.length) {
+    container.append(node('p', 'hint', 'Kalendarz nie zawiera obecnie żadnych zajęć.'));
+    return;
+  }
+
+  const groups = new Map();
+  for (const e of state.plan.events) {
+    if (!groups.has(e.seriesId)) groups.set(e.seriesId, []);
+    groups.get(e.seriesId).push(e);
+  }
+
+  const subjectMap = new Map(state.plan.subjects.map((s) => [s.id, s]));
+
+  for (const [seriesId, events] of groups) {
+    events.sort((a, b) => a.date.localeCompare(b.date));
+    const first = events[0];
+    const last = events[events.length - 1];
+    const subject = subjectMap.get(first.subjectId);
+    const subjectName = subject ? subject.name : 'Przedmiot';
+
+    const row = node('div', 'seriesrow');
+    const info = node('div', 'seriesrow-info');
+    info.append(
+      node('div', 'seriesrow-title', `${subjectName} · ${first.type} (${first.start}–${first.end})`),
+      node(
+        'div',
+        'seriesrow-meta',
+        events.length > 1
+          ? `Spotkań: ${events.length} · Zakres: ${first.date} → ${last.date}`
+          : `Pojedyncze spotkanie: ${first.date}`,
+      ),
+    );
+
+    const delBtn = node('button', 'danger', events.length > 1 ? `Usuń serię (${events.length})` : 'Usuń');
+    delBtn.type = 'button';
+    delBtn.onclick = () => {
+      if (
+        !confirm(
+          `Usunąć wszystkie spotkania z serii „${subjectName} (${first.type})” (${events.length} terminów, w tym przeniesione dni)?`,
+        )
+      ) {
+        return;
+      }
+      mutate((plan) => {
+        plan.events = plan.events.filter((e) => e.seriesId !== seriesId);
+      });
+      renderSeriesList();
+    };
+
+    row.append(info, delBtn);
+    container.append(row);
+  }
+}
+
+function openBulkDialog() {
+  renderSeriesList();
+  $('bulkDialog').showModal();
+}
+
+function runReconcile() {
+  try {
+    let summary = { removed: 0, added: 0 };
+    mutate((plan) => {
+      const res = reconcileWithAcademicYear(plan, uid);
+      plan.events = res.events;
+      summary = { removed: res.removed, added: res.added };
+    });
+    renderSeriesList();
+    setStatus(
+      `Przeliczono serie wg struktury roku: usunięto ${summary.removed} z dni wolnych/zamienionych, dodano ${summary.added} w dniach z zamianą planu.`,
+    );
+  } catch (err) {
+    setStatus(err.message);
+  }
+}
+
+function clearAllEvents() {
+  if (!state.plan.events.length) {
+    setStatus('Brak zajęć do usunięcia.');
+    return;
+  }
+  if (
+    !confirm(
+      `Czy na pewno usunąć WSZYSTKIE zajęcia (${state.plan.events.length} spotkań) z kalendarza? Przedmioty oraz struktura roku zostaną zachowane.`,
+    )
+  ) {
+    return;
+  }
+
+  mutate((plan) => {
+    plan.events = [];
+  });
+  renderSeriesList();
+  $('bulkDialog').close();
+  setStatus('Usunięto wszystkie zajęcia. Kliknij „Zapisz w chmurze”, jeśli chcesz nadpisać również plan w chmurze.');
+}
+
+function clearEntireCalendar() {
+  if (
+    !confirm(
+      'Czy na pewno wyczyścić CAŁY kalendarz do zera (wszystkie zajęcia, przedmioty oraz strukturę roku)? Tej operacji nie można cofnąć lokalnie bez kopii JSON.',
+    )
+  ) {
+    return;
+  }
+
+  mutate((plan) => {
+    Object.assign(plan, emptyPlan());
+  });
+  renderSeriesList();
+  $('bulkDialog').close();
+  setStatus('Kalendarz został całkowicie wyczyszczony do zera. Kliknij „Zapisz w chmurze”, aby nadpisać dane w chmurze.');
+}
 
 // --- Struktura roku akademickiego ------------------------------------------
 
@@ -626,6 +917,10 @@ function saveSpecialDay(event) {
         if (type === 'swap') item.targetDay = targetDay;
         plan.academicYear.specialDays.push(item);
       }
+
+      // Automatycznie dopasuj istniejące serie cykliczne do zaktualizowanej struktury roku
+      const reconciled = reconcileWithAcademicYear(plan, uid);
+      plan.events = reconciled.events;
     });
 
     $('specialDayLabel').value = '';
@@ -781,14 +1076,33 @@ async function sync(direction) {
 // --- Podpięcie zdarzeń -------------------------------------------------------
 
 function bindEvents() {
+  $('editModeToggle').onclick = () => setEditMode(!editMode);
   $('addEvent').onclick = () => openEventDialog();
   $('eventForm').onsubmit = saveEvent;
   $('deleteEvent').onclick = deleteEvent;
   $('repeat').onchange = updateRepeatFields;
 
+  $('detailsEditEventBtn').onclick = () => {
+    const id = detailsEventId;
+    $('eventDetailsDialog').close();
+    if (id) openEventDialog(id);
+  };
+
+  $('detailsEditSubjectBtn').onclick = () => {
+    const ev = state.plan.events.find((e) => e.id === detailsEventId);
+    const subj = state.plan.subjects.find((s) => s.id === ev?.subjectId);
+    $('eventDetailsDialog').close();
+    openSubjectDialog('', subj || null);
+  };
+
   $('subjects').onclick = () => openSubjectDialog();
   $('subjectForm').onsubmit = saveSubject;
   $('newSubject').onclick = resetSubjectForm;
+
+  $('bulkManageBtn').onclick = () => openBulkDialog();
+  $('reconcileBtn').onclick = runReconcile;
+  $('clearEventsBtn').onclick = clearAllEvents;
+  $('clearAllBtn').onclick = clearEntireCalendar;
 
   $('academicYearBtn').onclick = () => openAcademicYearDialog();
   $('academicYearForm').onsubmit = saveSpecialDay;
@@ -827,5 +1141,5 @@ function bindEvents() {
 
 loadFromStorage();
 bindEvents();
-render();
+setEditMode(false);
 reportState();
