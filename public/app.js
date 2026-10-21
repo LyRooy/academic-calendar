@@ -782,29 +782,26 @@ function renderEvent(event, layout, gridStartMin, specialDay = null) {
   const topRow = node('div', 'event-top-row');
   topRow.append(node('span', 'time', `${event.start} – ${event.end}`));
 
-  const tagsWrap = node('span', 'event-tags');
-
-  const typeTag = node('span', `type-tag ${typeVisual.variant}`);
-  typeTag.innerHTML = `<i class="ph ${typeVisual.icon}"></i> `;
-  typeTag.append(document.createTextNode(event.type));
-  tagsWrap.append(typeTag);
-
   if (cancelledByRector) {
     const rectorTag = node('span', 'rector-tag');
-    rectorTag.innerHTML = '<i class="ph ph-graduation-cap"></i> Odwołane';
-    tagsWrap.append(rectorTag);
+    rectorTag.innerHTML = '<i class="ph ph-graduation-cap"></i><span>Odwołane</span>';
+    topRow.append(rectorTag);
   }
   if (isCustom) {
     const customTag = node('span', 'custom-tag');
-    customTag.innerHTML = '<i class="ph ph-star-four"></i> Własne';
-    tagsWrap.append(customTag);
+    customTag.innerHTML = '<i class="ph ph-star-four"></i><span>Własne</span>';
+    topRow.append(customTag);
   }
   if (event.remote) {
     const remoteTag = node('span', 'remote-tag');
-    remoteTag.innerHTML = '<i class="ph ph-laptop"></i> Zdalnie';
-    tagsWrap.append(remoteTag);
+    remoteTag.innerHTML = '<i class="ph ph-laptop"></i><span>Zdalnie</span>';
+    topRow.append(remoteTag);
   }
-  topRow.append(tagsWrap);
+
+  const typeTag = node('span', `type-tag ${typeVisual.variant}`);
+  typeTag.innerHTML = `<i class="ph ${typeVisual.icon}"></i>`;
+  typeTag.append(node('span', '', event.type));
+  topRow.append(typeTag);
 
   button.append(topRow, node('span', 'name', title));
 
