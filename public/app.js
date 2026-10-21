@@ -741,12 +741,21 @@ function getEventTypeVisual(typeStr, isCustom = false) {
   if (t.includes('odrabianie')) {
     return { variant: 'type-makeup', icon: 'ph-clock-clockwise' };
   }
-  if (t.includes('lekarz') || t.includes('dentyst') || t.includes('prywatn')) {
+  if (t.includes('lekarz') || t.includes('dentyst') || t.includes('prywatn') || t.includes('badani')) {
     return { variant: 'type-other', icon: 'ph-first-aid-kit' };
+  }
+  if (t.includes('warsztat') || t.includes('szkoleni') || t.includes('kurs') || t.includes('trening')) {
+    return { variant: 'type-exercise', icon: 'ph-wrench' };
+  }
+  if (t.includes('obrona') || t.includes('dyplom')) {
+    return { variant: 'type-lecture', icon: 'ph-graduation-cap' };
+  }
+  if (t.includes('koło') || t.includes('kolo') || t.includes('zebranie') || t.includes('rada')) {
+    return { variant: 'type-consult', icon: 'ph-users-three' };
   }
   return {
     variant: 'type-other',
-    icon: isCustom ? 'ph-calendar-star' : 'ph-book-open',
+    icon: isCustom ? 'ph-calendar-star' : 'ph-tag',
   };
 }
 
@@ -801,9 +810,8 @@ function renderEvent(event, layout, gridStartMin, specialDay = null) {
   const typeTag = node('span', `type-tag ${typeVisual.variant}`);
   typeTag.innerHTML = `<i class="ph ${typeVisual.icon}"></i>`;
   typeTag.append(node('span', '', event.type));
-  topRow.append(typeTag);
 
-  button.append(topRow, node('span', 'name', title));
+  button.append(topRow, node('span', 'name', title), typeTag);
 
   if (event.room || event.teacher) {
     button.append(node('span', 'meta', [event.room, event.teacher].filter(Boolean).join(' · ')));
@@ -980,7 +988,47 @@ function saveSubject(event) {
 
 // --- Zajęcia -----------------------------------------------------------------
 
-const EVENT_FIELDS = ['type', 'start', 'end', 'room', 'teacher', 'notes'];
+const EVENT_FIELDS = ['start', 'end', 'room', 'teacher', 'notes'];
+const CUSTOM_TYPE_VALUE = '__custom__';
+
+function setSelectedEventType(typeValue, isCustomEvent = false) {
+  const select = $('typeSelect');
+  const customInput = $('typeCustom');
+  const val = (typeValue || (isCustomEvent ? 'Spotkanie' : 'Laboratorium')).trim();
+
+  const matchingOption = Array.from(select.options).find(
+    (opt) => opt.value !== CUSTOM_TYPE_VALUE && opt.value.toLowerCase() === val.toLowerCase(),
+  );
+
+  if (matchingOption) {
+    select.value = matchingOption.value;
+    customInput.value = '';
+    customInput.hidden = true;
+    customInput.required = false;
+  } else {
+    select.value = CUSTOM_TYPE_VALUE;
+    customInput.value = val;
+    customInput.hidden = false;
+    customInput.required = true;
+  }
+}
+
+function getSelectedEventType(isCustomEvent = false) {
+  if ($('typeSelect').value === CUSTOM_TYPE_VALUE) {
+    return $('typeCustom').value.trim() || (isCustomEvent ? 'Wydarzenie własne' : 'Laboratorium');
+  }
+  return $('typeSelect').value;
+}
+
+function updateTypeSelectFields() {
+  const isCustomType = $('typeSelect').value === CUSTOM_TYPE_VALUE;
+  const customInput = $('typeCustom');
+  customInput.hidden = !isCustomType;
+  customInput.required = isCustomType;
+  if (isCustomType) {
+    customInput.focus();
+  }
+}
 
 function findDefaultNonHolidayDate(preferredDate) {
   if (!holidayFor(preferredDate, state.plan.academicYear)) return preferredDate;
@@ -1004,11 +1052,13 @@ function updateSubjectSelectionFields() {
   $('roomLabelText').textContent = isCustom ? 'Miejsce / Sala (opcjonalnie)' : 'Sala (opcjonalnie)';
   $('teacherLabelText').textContent = isCustom ? 'Osoba / Prowadzący (opcjonalnie)' : 'Prowadzący (opcjonalnie)';
 
-  if (isCustom && !editingId) {
-    if ($('type').value === 'Laboratorium') {
-      $('type').value = 'Spotkanie';
+  if (!editingId) {
+    if (isCustom && $('typeSelect').value === 'Laboratorium') {
+      setSelectedEventType('Spotkanie', true);
+    } else if (!isCustom && $('typeSelect').value === 'Spotkanie') {
+      setSelectedEventType('Laboratorium', false);
     }
-    if ($('start').value === '08:00' && $('end').value === '09:30') {
+    if (isCustom && $('start').value === '08:00' && $('end').value === '09:30') {
       $('end').value = '09:00';
     }
   }
@@ -1055,6 +1105,7 @@ function openEventDialog(id, initialDate = null, initialStart = null) {
 
   if (event) {
     for (const field of EVENT_FIELDS) $(field).value = event[field];
+    setSelectedEventType(event.type, !event.subjectId);
     $('remote').checked = !!event.remote;
     if (event.subjectId) {
       select.value = event.subjectId;
@@ -1075,6 +1126,7 @@ function openEventDialog(id, initialDate = null, initialStart = null) {
     if (defaultToCustom) {
       select.value = CUSTOM_SUBJECT_VALUE;
     }
+    setSelectedEventType(defaultToCustom ? 'Spotkanie' : 'Laboratorium', defaultToCustom);
     const startVal = initialStart || (defaultToCustom ? '12:00' : '08:00');
     const defaultDurationMin = defaultToCustom ? 60 : 90;
     $('start').value = startVal;
@@ -1104,7 +1156,7 @@ function readEventForm() {
 
   const base = {
     subjectId: isCustom ? null : $('subject').value,
-    type: $('type').value.trim() || (isCustom ? 'Wydarzenie własne' : 'Laboratorium'),
+    type: getSelectedEventType(isCustom),
     date: $('date').value,
     start,
     end,
@@ -1782,6 +1834,7 @@ function bindEvents() {
   $('editModeToggle').onclick = () => setEditMode(!editMode);
   $('addEvent').onclick = () => openEventDialog(null, addDays(week, selectedDayIndex));
   $('subject').onchange = updateSubjectSelectionFields;
+  $('typeSelect').onchange = updateTypeSelectFields;
   $('start').onchange = () => {
     const startVal = $('start').value;
     if (!startVal) return;

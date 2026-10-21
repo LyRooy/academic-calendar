@@ -1021,6 +1021,10 @@ textarea:focus-visible {
   flex-shrink: 0;
 }
 
+.type-tag {
+  margin: 1px 0;
+}
+
 .remote-tag {
   background: var(--surface);
   color: var(--text);

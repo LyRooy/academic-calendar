@@ -175,22 +175,28 @@
         <div class="pair">
           <label>
             Typ / kategoria
-            <input id="type" list="types" required maxlength="60" value="Laboratorium">
-            <datalist id="types">
-              <option>Wykład</option>
-              <option>Laboratorium</option>
-              <option>Projekt</option>
-              <option>Ćwiczenia</option>
-              <option>Seminarium</option>
-              <option>Odrabianie zajęć</option>
-              <option>Konsultacje</option>
-              <option>Spotkanie</option>
-              <option>Egzamin</option>
-              <option>Kolokwium</option>
-              <option>Spotkanie koła naukowego</option>
-              <option>Sprawa prywatna</option>
-              <option>Wydarzenie własne</option>
-            </datalist>
+            <select id="typeSelect">
+              <option value="Laboratorium">Laboratorium</option>
+              <option value="Wykład">Wykład</option>
+              <option value="Projekt">Projekt</option>
+              <option value="Ćwiczenia">Ćwiczenia</option>
+              <option value="Seminarium">Seminarium</option>
+              <option value="Konsultacje">Konsultacje</option>
+              <option value="Egzamin / Kolokwium">Egzamin / Kolokwium</option>
+              <option value="Odrabianie zajęć">Odrabianie zajęć</option>
+              <option value="Spotkanie">Spotkanie</option>
+              <option value="Spotkanie z promotorem">Spotkanie z promotorem</option>
+              <option value="Spotkanie koła naukowego">Spotkanie koła naukowego</option>
+              <option value="Sprawa prywatna / lekarz">Sprawa prywatna / lekarz</option>
+              <option value="Wydarzenie własne">Wydarzenie własne</option>
+              <option value="__custom__">✎ Inny (wpisz własny)...</option>
+            </select>
+            <input
+              id="typeCustom"
+              maxlength="60"
+              placeholder="Wpisz własny typ (np. Warsztaty, Lektorat)..."
+              hidden
+            >
           </label>
           <label>
             Data
