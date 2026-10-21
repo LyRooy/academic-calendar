@@ -157,13 +157,13 @@ test('datesFor respektuje święta, przerwy i dni z zamianą planu', () => {
   assert.throws(() => datesFor('2026-10-21', '', 'once', '', academicYear, true), /dzień wolny/);
 });
 
-test('reconcileWithAcademicYear dopasowuje istniejące serie i przedmioty obsługują opis details', () => {
+test('reconcileWithAcademicYear dopasowuje istniejące serie i przedmioty obsługują opis details oraz remote', () => {
   const plan = samplePlan();
   plan.subjects[0].details = 'ECTS: 5, Prowadzący: dr Kowalski';
   plan.events = [
-    { ...plan.events[0], id: 'e1', date: '2026-10-14' },
-    { ...plan.events[0], id: 'e2', date: '2026-10-21' },
-    { ...plan.events[0], id: 'e3', date: '2026-10-28' },
+    { ...plan.events[0], id: 'e1', date: '2026-10-14', remote: true },
+    { ...plan.events[0], id: 'e2', date: '2026-10-21', remote: true },
+    { ...plan.events[0], id: 'e3', date: '2026-10-28', remote: true },
   ];
   plan.academicYear = {
     specialDays: [
@@ -181,6 +181,39 @@ test('reconcileWithAcademicYear dopasowuje istniejące serie i przedmioty obsłu
     reconciled.events.map((e) => e.date).sort(),
     ['2026-10-14', '2026-10-27', '2026-10-28'],
   );
+  assert.equal(reconciled.events.every((e) => e.remote === true), true);
+
+  // Nieprawidłowy typ pola remote odrzucany przez walidację
+  const badRemote = samplePlan();
+  badRemote.events[0].remote = 'yes';
+  assert.throws(() => validatePlan(badRemote));
+
+  // Wydarzenie własne / poza przedmiotem (off-top) bez subjectId
+  const withCustomEvent = samplePlan();
+  withCustomEvent.events.push({
+    id: 'custom_1',
+    seriesId: 'custom_series',
+    subjectId: null,
+    customTitle: 'Spotkanie z promotorem',
+    customColor: '#b87d3b',
+    type: 'Spotkanie',
+    date: '2026-10-15',
+    start: '12:00',
+    end: '13:00',
+    room: 'A-101',
+    teacher: 'prof. Nowak',
+    notes: 'Omówienie rozdziału 2',
+  });
+  assert.equal(validatePlan(withCustomEvent).events.length, 2);
+
+  // Wydarzenie bez subjectId i bez customTitle jest odrzucane
+  const missingCustomTitle = samplePlan();
+  missingCustomTitle.events.push({
+    ...withCustomEvent.events[1],
+    id: 'custom_bad',
+    customTitle: '',
+  });
+  assert.throws(() => validatePlan(missingCustomTitle));
 });
 
 // --- API -----------------------------------------------------------------------

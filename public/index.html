@@ -65,7 +65,9 @@
         </div>
       </section>
 
-      <div id="calendar" class="calendar"></div>
+      <div class="calendar-scroll">
+        <div id="calendar" class="calendar"></div>
+      </div>
 
       <p id="calendarHint" class="hint">
         Kliknij zajęcia, aby zobaczyć szczegóły przedmiotu i spotkania. Włącz „Tryb edycji” u góry, aby dodawać lub zmieniać zajęcia w kalendarzu.
@@ -85,6 +87,7 @@
       <div class="details-body">
         <div class="details-badges">
           <span id="detailsType" class="details-badge"></span>
+          <span id="detailsRemote" class="details-badge remote" hidden><i class="ph ph-laptop"></i> Zdalnie (online)</span>
           <span id="detailsDate" class="details-badge subtle"></span>
           <span id="detailsTime" class="details-badge subtle"></span>
         </div>
@@ -130,14 +133,31 @@
         </div>
 
         <label>
-          Przedmiot
+          Przedmiot lub typ wpisu
           <select id="subject" required></select>
         </label>
-        <p class="hint">Nowy przedmiot oraz jego opis dodasz w przycisku „Przedmioty”.</p>
+
+        <!-- Widoczne gdy wybrano „Wydarzenie własne / poza przedmiotem” -->
+        <div id="customEventFields" class="pair" hidden>
+          <label>
+            Nazwa wydarzenia / spotkania
+            <input
+              id="customTitle"
+              maxlength="120"
+              placeholder="np. Spotkanie z promotorem, Wizyta u dentysty"
+            >
+          </label>
+          <label class="color-label">
+            Kolor
+            <input id="customColor" type="color" value="#b87d3b">
+          </label>
+        </div>
+
+        <p id="subjectHint" class="hint">Nowy przedmiot oraz jego opis dodasz w przycisku „Przedmioty”.</p>
 
         <div class="pair">
           <label>
-            Typ zajęć
+            Typ / kategoria
             <input id="type" list="types" required maxlength="60" value="Laboratorium">
             <datalist id="types">
               <option>Wykład</option>
@@ -147,8 +167,11 @@
               <option>Seminarium</option>
               <option>Odrabianie zajęć</option>
               <option>Konsultacje</option>
+              <option>Spotkanie z promotorem</option>
               <option>Egzamin / Kolokwium</option>
               <option>Spotkanie koła naukowego</option>
+              <option>Sprawa prywatna / lekarz</option>
+              <option>Wydarzenie własne</option>
             </datalist>
           </label>
           <label>
@@ -178,6 +201,11 @@
             <input id="teacher" maxlength="120">
           </label>
         </div>
+
+        <label class="checkbox-row">
+          <input type="checkbox" id="remote">
+          <span><i class="ph ph-laptop"></i> Zajęcia zdalne (online) — przyciemnione na planie</span>
+        </label>
 
         <!-- Widoczne tylko przy dodawaniu nowych zajęć -->
         <div id="repeatFields">

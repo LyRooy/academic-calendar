@@ -250,12 +250,24 @@ function isValidSubject(subject, knownIds) {
 }
 
 function isValidEvent(event, knownIds, subjectIds) {
+  if (!event || !isId(event.id) || knownIds.has(event.id) || !isId(event.seriesId)) {
+    return false;
+  }
+
+  const hasSubject = subjectIds.has(event.subjectId);
+  const isCustomEvent =
+    (event.subjectId === null || event.subjectId === '') &&
+    isNonEmptyText(event.customTitle, LIMITS.subjectName);
+
+  if (!hasSubject && !isCustomEvent) return false;
+
+  const validCustomFields =
+    (event.customTitle === undefined || isText(event.customTitle, LIMITS.subjectName)) &&
+    (event.customColor === undefined ||
+      (typeof event.customColor === 'string' && COLOR_PATTERN.test(event.customColor)));
+
   return (
-    !!event &&
-    isId(event.id) &&
-    !knownIds.has(event.id) &&
-    isId(event.seriesId) &&
-    subjectIds.has(event.subjectId) &&
+    validCustomFields &&
     isNonEmptyText(event.type, LIMITS.type) &&
     validDate(event.date) &&
     isTime(event.start) &&
@@ -263,7 +275,8 @@ function isValidEvent(event, knownIds, subjectIds) {
     event.end > event.start &&
     isText(event.room, LIMITS.room) &&
     isText(event.teacher, LIMITS.teacher) &&
-    isText(event.notes, LIMITS.notes)
+    isText(event.notes, LIMITS.notes) &&
+    (event.remote === undefined || typeof event.remote === 'boolean')
   );
 }
 

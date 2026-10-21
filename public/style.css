@@ -28,7 +28,15 @@
 
   --event-bg: #f6f8f2;
   --event-border: #dfe5db;
+  --remote-bg: #e1e6e0;
+  --remote-border: #bdc7bd;
+  --gap-bg: #e4ebe299;
+  --gap-border: #c5d1c3;
+  --grid-quarter: #e9eee6;
+  --grid-hour: #d5ded2;
   --today-border: #5a8d70;
+  --slot-height: 20px;
+  --head-height: 52px;
 
   --shadow: #12382725;
   --backdrop: #0b231c66;
@@ -64,6 +72,12 @@
 
   --event-bg: #1b2724;
   --event-border: #2b3b36;
+  --remote-bg: #111917;
+  --remote-border: #25332f;
+  --gap-bg: #131d1acc;
+  --gap-border: #2a3c36;
+  --grid-quarter: #1b2824;
+  --grid-hour: #283934;
   --today-border: #4f9a7a;
 
   --shadow: #00000080;
@@ -316,17 +330,91 @@ textarea:focus-visible {
 }
 
 /* ==========================================================================
-   Kalendarz
+   Kalendarz i siatka godzinowa (wiersze co 15 minut)
    ========================================================================== */
+
+.calendar-scroll {
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
 
 .calendar {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: 62px repeat(7, minmax(155px, 1fr));
+  gap: 8px;
+  align-items: start;
 }
 
+.calendar.has-special-days {
+  --head-height: 78px;
+}
+
+/* Kolumna godzin po lewej od poniedziałku */
+.time-col {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  overflow: hidden;
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  user-select: none;
+}
+
+.time-head {
+  height: var(--head-height);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  background: var(--soft);
+}
+
+.time-head .ph {
+  font-size: 15px;
+}
+
+.time-slots {
+  position: relative;
+}
+
+.time-slot {
+  height: var(--slot-height);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.time-slot.hour {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text);
+  border-top: 1px solid var(--grid-hour);
+  background: var(--soft);
+}
+
+.time-slot.hour:first-child {
+  border-top: none;
+}
+
+.time-slot.quarter {
+  font-size: 9px;
+  color: var(--faint);
+  border-top: 1px dashed var(--grid-quarter);
+}
+
+/* Kolumna pojedynczego dnia */
 .day {
-  min-height: 350px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 13px;
@@ -344,13 +432,21 @@ textarea:focus-visible {
   opacity: 0.95;
 }
 
+.day-top {
+  height: var(--head-height);
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
 .dayhead {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 5px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
+  padding: 10px 12px;
+  flex: 1;
   cursor: default;
   background: transparent;
   transition: background 0.15s ease;
@@ -383,8 +479,8 @@ textarea:focus-visible {
 }
 
 .dayhead strong {
-  font-size: 20px;
-  font-weight: 500;
+  font-size: 19px;
+  font-weight: 600;
 }
 
 .dayhead-add {
@@ -410,51 +506,89 @@ textarea:focus-visible {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 5px 12px;
-  border-bottom: 1px dashed var(--line);
-  line-height: 1.4;
+  letter-spacing: 0.4px;
+  padding: 3px 10px;
+  border-top: 1px dashed var(--line);
+  line-height: 1.3;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .special-day-badge .ph {
-  font-size: 13px;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
 .special-day-badge.holiday {
   background: #ffdede22;
   color: var(--danger);
-  border-bottom-color: var(--danger);
+  border-top-color: var(--danger);
 }
 
 .special-day-badge.swap {
   background: #ceaa6522;
   color: var(--accent);
-  border-bottom-color: var(--accent);
+  border-top-color: var(--accent);
 }
 
-.events {
-  padding: 9px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+/* Siatka 15-minutowa dla pojedynczego dnia */
+.day-timeline {
+  position: relative;
+  width: 100%;
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--slot-height) * 4 - 1px),
+      var(--grid-hour) calc(var(--slot-height) * 4 - 1px),
+      var(--grid-hour) calc(var(--slot-height) * 4)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--slot-height) - 1px),
+      var(--grid-quarter) calc(var(--slot-height) - 1px),
+      var(--grid-quarter) var(--slot-height)
+    );
 }
 
-.day-empty-btn {
+.day-timeline.editable {
+  cursor: cell;
+}
+
+.day-empty-overlay {
+  position: absolute;
+  inset: 12px 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  flex: 1;
-  min-height: 80px;
+  gap: 6px;
+  color: var(--faint);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.day-empty-btn {
+  position: absolute;
+  top: 16px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
   border: 1px dashed var(--line);
-  background: transparent;
+  background: var(--surface);
   color: var(--faint);
   border-radius: 8px;
   font-size: 12px;
   cursor: pointer;
-  padding: 14px 8px;
+  padding: 10px 8px;
   transition: all 0.15s ease;
+  z-index: 1;
 }
 
 .day-empty-btn:hover {
@@ -463,61 +597,153 @@ textarea:focus-visible {
   border-style: solid;
 }
 
-.day-empty-state {
+/* Okienko między zajęciami */
+.gap-block {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--gap-bg),
+    var(--gap-bg) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  border: 1px dashed var(--gap-border);
+  border-radius: 7px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  width: 100%;
-  flex: 1;
-  min-height: 80px;
-  color: var(--faint);
-  font-size: 12px;
-  padding: 14px 8px;
+  gap: 2px;
+  padding: 2px 6px;
+  color: var(--muted);
   text-align: center;
+  overflow: hidden;
+  z-index: 1;
+  pointer-events: none;
 }
 
-/* Pojedyncze zajęcia — kolor paska ustawiany z JS przez --event-color */
+.gap-block .gap-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.2;
+}
+
+.gap-block .gap-time {
+  font-size: 10px;
+  color: var(--faint);
+  line-height: 1.1;
+}
+
+/* Pojedyncze zajęcia na osi czasu — wysokość odpowiada czasowi trwania */
 .event {
-  display: block;
-  width: 100%;
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
   text-align: left;
   border: 1px solid var(--event-border);
   border-left: 4px solid var(--event-color);
-  padding: 12px 9px;
-  margin-bottom: 9px;
+  border-radius: 8px;
+  padding: 6px 8px;
   background: var(--event-bg);
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  z-index: 2;
+  box-shadow: 0 2px 6px #0000000d;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.event:hover {
+  z-index: 3;
+  box-shadow: 0 4px 12px var(--shadow);
+}
+
+/* Zajęcia zdalne (przyciemnione) */
+.event.remote {
+  background: var(--remote-bg);
+  border-color: var(--remote-border);
+  border-left: 4px dashed var(--event-color);
+  color: var(--muted);
+  opacity: 0.88;
+}
+
+.event-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  width: 100%;
+  margin-bottom: 3px;
 }
 
 .event .time {
-  display: block;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  margin-bottom: 9px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.remote-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 .event .name {
   display: block;
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .event .type {
   display: block;
-  font-size: 10px;
+  font-size: 9.5px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  margin-top: 8px;
+  margin-top: 3px;
   color: var(--muted);
 }
 
 .event .meta {
   display: block;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 400;
-  margin-top: 6px;
+  margin-top: 3px;
   color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.event.compact {
+  padding: 3px 6px;
+}
+
+.event.compact .name {
+  font-size: 11px;
+}
+
+.details-badge.remote {
+  background: var(--remote-bg);
+  color: var(--text);
+  border: 1px solid var(--remote-border);
 }
 
 /* ==========================================================================
@@ -877,18 +1103,12 @@ textarea {
    Responsywność
    ========================================================================== */
 
-/* Tablety: 4 kolumny dni */
 @media (max-width: 1100px) {
   .calendar {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .day {
-    min-height: 260px;
+    grid-template-columns: 56px repeat(7, minmax(150px, 1fr));
   }
 }
 
-/* Telefony: dni jeden pod drugim */
 @media (max-width: 650px) {
   header,
   main {
@@ -954,27 +1174,7 @@ textarea {
   }
 
   .calendar {
-    grid-template-columns: 1fr;
-  }
-
-  .day {
-    min-height: 0;
-  }
-
-  .dayhead {
-    padding: 10px 15px;
-  }
-
-  .events {
-    padding: 9px 12px;
-  }
-
-  .event {
-    padding: 12px;
-  }
-
-  .empty {
-    padding: 5px;
+    grid-template-columns: 52px repeat(7, minmax(145px, 1fr));
   }
 
   .hint {

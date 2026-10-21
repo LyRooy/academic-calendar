@@ -155,7 +155,139 @@ const DAY_KEY_NAMES = {
   sun: 'niedzieli',
 };
 
-// --- Widok tygodnia ----------------------------------------------------------
+// --- Widok tygodnia (oś godzin co 15 min, zajęcia proporcjonalne i okienka) --
+
+const SLOT_MINUTES = 15;
+const SLOT_HEIGHT_PX = 20;
+const DEFAULT_START_MIN = 7 * 60; // 07:00
+const DEFAULT_END_MIN = 20 * 60;  // 20:00
+
+function fromMinutes(total) {
+  const clamped = Math.max(0, Math.min(23 * 60 + 59, Math.round(total)));
+  const h = String(Math.floor(clamped / 60)).padStart(2, '0');
+  const m = String(clamped % 60).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function formatDuration(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h} godz. ${m} min`;
+  if (h > 0) return `${h} godz.`;
+  return `${m} min`;
+}
+
+/** Wyznacza zakres godzin siatki tygodnia (zaokrąglony do pełnych godzin). */
+function getGridBounds(weekEvents) {
+  let startMin = DEFAULT_START_MIN;
+  let endMin = DEFAULT_END_MIN;
+
+  for (const e of weekEvents) {
+    const s = toMinutes(e.start);
+    const end = toMinutes(e.end);
+    if (s < startMin) startMin = Math.floor(s / 60) * 60;
+    if (end > endMin) endMin = Math.ceil(end / 60) * 60;
+  }
+
+  return { startMin, endMin };
+}
+
+/** Wylicza okienka (wolne przerwy) pomiędzy zajęciami w danym dniu. */
+function computeGaps(dayEvents) {
+  if (dayEvents.length < 2) return [];
+
+  const intervals = dayEvents
+    .map((e) => ({ start: toMinutes(e.start), end: toMinutes(e.end) }))
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  const merged = [intervals[0]];
+  for (let i = 1; i < intervals.length; i++) {
+    const prev = merged[merged.length - 1];
+    const cur = intervals[i];
+    if (cur.start <= prev.end) {
+      prev.end = Math.max(prev.end, cur.end);
+    } else {
+      merged.push({ ...cur });
+    }
+  }
+
+  const gaps = [];
+  for (let i = 0; i < merged.length - 1; i++) {
+    const gapStart = merged[i].end;
+    const gapEnd = merged[i + 1].start;
+    const durationMin = gapEnd - gapStart;
+    if (durationMin > 0) {
+      gaps.push({ startMin: gapStart, endMin: gapEnd, durationMin });
+    }
+  }
+  return gaps;
+}
+
+/** Rozkłada nakładające się zajęcia w kolumny obok siebie. */
+function layoutDayEvents(dayEvents) {
+  const sorted = [...dayEvents].sort(
+    (a, b) => toMinutes(a.start) - toMinutes(b.start) || toMinutes(b.end) - toMinutes(a.end),
+  );
+  const clusters = [];
+  let currentCluster = [];
+  let clusterEnd = -1;
+
+  for (const ev of sorted) {
+    const s = toMinutes(ev.start);
+    const e = toMinutes(ev.end);
+    if (currentCluster.length && s >= clusterEnd) {
+      clusters.push(currentCluster);
+      currentCluster = [];
+      clusterEnd = -1;
+    }
+    currentCluster.push(ev);
+    clusterEnd = Math.max(clusterEnd, e);
+  }
+  if (currentCluster.length) clusters.push(currentCluster);
+
+  const result = new Map();
+  for (const cluster of clusters) {
+    const colEnds = [];
+    const placement = [];
+    for (const ev of cluster) {
+      const s = toMinutes(ev.start);
+      const e = toMinutes(ev.end);
+      let col = colEnds.findIndex((end) => end <= s);
+      if (col < 0) {
+        col = colEnds.length;
+        colEnds.push(e);
+      } else {
+        colEnds[col] = e;
+      }
+      placement.push({ ev, col });
+    }
+    const totalCols = colEnds.length;
+    for (const { ev, col } of placement) {
+      result.set(ev.id, { col, totalCols, overlaps: totalCols > 1 });
+    }
+  }
+  return result;
+}
+
+function renderTimeColumn(gridStartMin, gridEndMin) {
+  const col = node('aside', 'time-col');
+  col.setAttribute('aria-hidden', 'true');
+
+  const head = node('div', 'time-head');
+  head.innerHTML = '<i class="ph ph-clock"></i><span>Godz.</span>';
+  col.append(head);
+
+  const slots = node('div', 'time-slots');
+  for (let m = gridStartMin; m < gridEndMin; m += SLOT_MINUTES) {
+    const isFullHour = m % 60 === 0;
+    const label = isFullHour ? fromMinutes(m) : `:${String(m % 60).padStart(2, '0')}`;
+    const slot = node('div', isFullHour ? 'time-slot hour' : 'time-slot quarter', label);
+    slots.append(slot);
+  }
+
+  col.append(slots);
+  return col;
+}
 
 function render() {
   const weekEnd = addDays(week, 6);
@@ -164,21 +296,42 @@ function render() {
 
   const events = state.plan.events.filter((e) => e.date >= week && e.date <= weekEnd);
   const minutes = events.reduce((sum, e) => sum + toMinutes(e.end) - toMinutes(e.start), 0);
-  $('summary').textContent =
-    `Liczba spotkań: ${events.length} · Łącznie: ${Math.floor(minutes / 60)} godz. ${minutes % 60} min`;
 
   const specialDays = state.plan.academicYear?.specialDays || [];
   const specialDayMap = new Map(specialDays.map((sd) => [sd.date, sd]));
 
+  let weekHasSpecialDay = false;
+  let totalGapCount = 0;
+  let totalGapMinutes = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(week, i);
+    if (specialDayMap.has(d)) weekHasSpecialDay = true;
+    const dayEvs = events.filter((e) => e.date === d);
+    for (const g of computeGaps(dayEvs)) {
+      totalGapCount++;
+      totalGapMinutes += g.durationMin;
+    }
+  }
+
+  const gapSummary =
+    totalGapCount > 0 ? ` · Okienka: ${totalGapCount} (${formatDuration(totalGapMinutes)})` : '';
+  $('summary').textContent =
+    `Liczba spotkań: ${events.length} · Łącznie zajęć: ${formatDuration(minutes)}${gapSummary}`;
+
+  const { startMin, endMin } = getGridBounds(events);
+
   const calendar = $('calendar');
+  calendar.classList.toggle('has-special-days', weekHasSpecialDay);
   calendar.replaceChildren();
+  calendar.append(renderTimeColumn(startMin, endMin));
+
   for (let i = 0; i < 7; i++) {
     const date = addDays(week, i);
-    calendar.append(renderDay(date, DAY_NAMES[i], events, specialDayMap.get(date)));
+    calendar.append(renderDay(date, DAY_NAMES[i], events, specialDayMap.get(date), startMin, endMin));
   }
 }
 
-function renderDay(date, dayName, weekEvents, specialDay) {
+function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndMin) {
   const isHoliday = specialDay?.type === 'holiday';
   const isSwap = specialDay?.type === 'swap';
   const canAddInDay = editMode && !isHoliday;
@@ -189,6 +342,7 @@ function renderDay(date, dayName, weekEvents, specialDay) {
 
   const day = node('section', dayClass);
 
+  const topWrap = node('div', 'day-top');
   const head = node('div', canAddInDay ? 'dayhead editable' : 'dayhead');
   const headInfo = node('div', 'dayhead-info');
   headInfo.append(node('span', '', dayName), node('strong', '', date.slice(8)));
@@ -206,7 +360,7 @@ function renderDay(date, dayName, weekEvents, specialDay) {
     head.title = 'Dzień wolny od zajęć — dodawanie zajęć zablokowane';
   }
 
-  day.append(head);
+  topWrap.append(head);
 
   // Oznaczenie dnia specjalnego (święto lub plan z innego dnia)
   if (specialDay) {
@@ -222,61 +376,146 @@ function renderDay(date, dayName, weekEvents, specialDay) {
     }
     badge.onclick = () => openAcademicYearDialog();
     badge.title = 'Kliknij, aby zarządzać strukturą roku';
-    day.append(badge);
+    topWrap.append(badge);
   }
 
-  const list = node('div', 'events');
+  day.append(topWrap);
+
+  const totalSlots = (gridEndMin - gridStartMin) / SLOT_MINUTES;
+  const timeline = node('div', canAddInDay ? 'day-timeline editable' : 'day-timeline');
+  timeline.style.height = `${totalSlots * SLOT_HEIGHT_PX}px`;
+
+  if (canAddInDay) {
+    timeline.title = 'Kliknij w wiersz godziny, aby dodać zajęcia o tej porze';
+    timeline.onclick = (e) => {
+      if (e.target !== timeline) return;
+      const slotIndex = Math.max(0, Math.min(totalSlots - 2, Math.floor(e.offsetY / SLOT_HEIGHT_PX)));
+      const clickedMin = gridStartMin + slotIndex * SLOT_MINUTES;
+      openEventDialog(null, date, fromMinutes(clickedMin));
+    };
+  }
+
   const dayEvents = weekEvents
     .filter((e) => e.date === date)
     .sort((a, b) => a.start.localeCompare(b.start));
 
-  for (const event of dayEvents) list.append(renderEvent(event, dayEvents));
+  // Renderowanie okienek między zajęciami
+  for (const gap of computeGaps(dayEvents)) {
+    const topPx = ((gap.startMin - gridStartMin) / SLOT_MINUTES) * SLOT_HEIGHT_PX;
+    const heightPx = (gap.durationMin / SLOT_MINUTES) * SLOT_HEIGHT_PX;
+    const gapEl = node('div', 'gap-block');
+    gapEl.style.top = `${topPx}px`;
+    gapEl.style.height = `${heightPx}px`;
+
+    const title = node('span', 'gap-title');
+    title.innerHTML = '<i class="ph ph-hourglass-low"></i> ';
+    title.append(document.createTextNode(`Okienko · ${formatDuration(gap.durationMin)}`));
+    gapEl.append(title);
+
+    if (gap.durationMin >= 30) {
+      gapEl.append(node('span', 'gap-time', `${fromMinutes(gap.startMin)} – ${fromMinutes(gap.endMin)}`));
+    }
+    timeline.append(gapEl);
+  }
+
+  const layoutMap = layoutDayEvents(dayEvents);
+  for (const event of dayEvents) {
+    timeline.append(renderEvent(event, layoutMap.get(event.id), gridStartMin));
+  }
 
   if (!dayEvents.length) {
     if (isHoliday) {
-      const emptyHoliday = node('div', 'day-empty-state');
+      const emptyHoliday = node('div', 'day-empty-overlay');
       emptyHoliday.innerHTML = '<i class="ph ph-sun-horizon"></i> Dzień wolny od zajęć';
-      list.append(emptyHoliday);
+      timeline.append(emptyHoliday);
     } else if (editMode) {
       const emptyBtn = node('button', 'day-empty-btn');
       emptyBtn.type = 'button';
       emptyBtn.innerHTML = '<i class="ph ph-plus-circle"></i> Dodaj zajęcia';
       emptyBtn.onclick = () => openEventDialog(null, date);
-      list.append(emptyBtn);
+      timeline.append(emptyBtn);
     } else {
-      const emptyNormal = node('div', 'day-empty-state', 'Brak zajęć');
-      list.append(emptyNormal);
+      const emptyNormal = node('div', 'day-empty-overlay', 'Brak zajęć');
+      timeline.append(emptyNormal);
     }
   }
 
-  day.append(list);
+  day.append(timeline);
   return day;
 }
 
-function renderEvent(event, dayEvents) {
-  const subject = state.plan.subjects.find((s) => s.id === event.subjectId);
-  const button = node('button', 'event');
+const CUSTOM_SUBJECT_VALUE = '__custom__';
+const DEFAULT_CUSTOM_COLOR = '#b87d3b';
+
+function getEventDisplay(event) {
+  if (event.subjectId) {
+    const subject = state.plan.subjects.find((s) => s.id === event.subjectId);
+    return {
+      title: subject?.name || 'Przedmiot',
+      color: subject?.color || '#397d70',
+      isCustom: false,
+      subject: subject || null,
+    };
+  }
+  return {
+    title: event.customTitle || 'Wydarzenie',
+    color: event.customColor || DEFAULT_CUSTOM_COLOR,
+    isCustom: true,
+    subject: null,
+  };
+}
+
+function renderEvent(event, layout, gridStartMin) {
+  const { title, color, isCustom } = getEventDisplay(event);
+  const startMin = toMinutes(event.start);
+  const endMin = toMinutes(event.end);
+  const durationMin = Math.max(SLOT_MINUTES, endMin - startMin);
+
+  const topPx = ((startMin - gridStartMin) / SLOT_MINUTES) * SLOT_HEIGHT_PX;
+  const heightPx = (durationMin / SLOT_MINUTES) * SLOT_HEIGHT_PX;
+
+  let className = 'event';
+  if (event.remote) className += ' remote';
+  if (isCustom) className += ' custom-event';
+  if (durationMin < 45) className += ' compact';
+
+  const button = node('button', className);
   button.type = 'button';
-  button.style.setProperty('--event-color', subject.color);
+  button.style.setProperty('--event-color', color);
+  button.style.top = `${topPx}px`;
+  button.style.height = `${heightPx}px`;
 
-  button.append(
-    node('span', 'time', `${event.start} – ${event.end}`),
-    node('span', 'name', subject.name),
-    node('span', 'type', event.type),
-  );
+  const { col = 0, totalCols = 1, overlaps = false } = layout || {};
+  const widthPct = 100 / totalCols;
+  const leftPct = col * widthPct;
+  button.style.left = `calc(${leftPct}% + 3px)`;
+  button.style.width = `calc(${widthPct}% - 6px)`;
 
-  if (event.room || event.teacher) {
+  const topRow = node('div', 'event-top-row');
+  topRow.append(node('span', 'time', `${event.start} – ${event.end}`));
+
+  if (event.remote) {
+    const remoteTag = node('span', 'remote-tag');
+    remoteTag.innerHTML = '<i class="ph ph-laptop"></i> Zdalnie';
+    topRow.append(remoteTag);
+  }
+
+  button.append(topRow, node('span', 'name', title));
+
+  if (durationMin >= 30) {
+    button.append(node('span', 'type', event.remote ? `${event.type} · Zdalnie` : event.type));
+  }
+
+  if (durationMin >= 45 && (event.room || event.teacher)) {
     button.append(node('span', 'meta', [event.room, event.teacher].filter(Boolean).join(' · ')));
   }
 
-  const overlaps = dayEvents.some(
-    (other) => other.id !== event.id && other.start < event.end && other.end > event.start,
-  );
   if (overlaps) button.append(node('span', 'meta', '⚠ Nakładające się godziny'));
 
-  if (event.notes) button.append(node('span', 'meta', event.notes));
+  if (durationMin >= 60 && event.notes) button.append(node('span', 'meta', event.notes));
 
-  button.onclick = () => {
+  button.onclick = (e) => {
+    e.stopPropagation();
     if (editMode) {
       openEventDialog(event.id);
     } else {
@@ -291,16 +530,16 @@ function renderEvent(event, dayEvents) {
 function openEventDetailsDialog(id) {
   const event = state.plan.events.find((e) => e.id === id);
   if (!event) return;
-  const subject = state.plan.subjects.find((s) => s.id === event.subjectId);
-  if (!subject) return;
+  const { title, color, isCustom, subject } = getEventDisplay(event);
 
   detailsEventId = event.id;
 
-  $('detailsColorDot').style.background = subject.color;
-  $('detailsSubjectName').textContent = subject.name;
+  $('detailsColorDot').style.background = color;
+  $('detailsSubjectName').textContent = title;
   $('detailsType').textContent = event.type;
+  $('detailsRemote').hidden = !event.remote;
   $('detailsDate').textContent = formatFullDate(event.date);
-  $('detailsTime').textContent = `${event.start} – ${event.end}`;
+  $('detailsTime').textContent = `${event.start} – ${event.end} (${formatDuration(toMinutes(event.end) - toMinutes(event.start))})`;
 
   $('detailsRoom').textContent = event.room || 'Nie podano';
   $('detailsTeacher').textContent = event.teacher || 'Nie podano';
@@ -309,8 +548,13 @@ function openEventDetailsDialog(id) {
   $('detailsNotesSection').hidden = !hasNotes;
   $('detailsNotes').textContent = event.notes || '';
 
-  const hasSubjectDetails = !!subject.details?.trim();
-  $('detailsSubjectSection').hidden = !setSubjectDetailsContent(subject.details);
+  if (isCustom || !subject) {
+    $('detailsSubjectSection').hidden = true;
+    $('detailsEditSubjectBtn').hidden = true;
+  } else {
+    $('detailsEditSubjectBtn').hidden = false;
+    $('detailsSubjectSection').hidden = !setSubjectDetailsContent(subject.details);
+  }
 
   $('eventDetailsDialog').showModal();
 }
@@ -443,7 +687,20 @@ function findDefaultNonHolidayDate(preferredDate) {
   return preferredDate;
 }
 
-function openEventDialog(id, initialDate = null) {
+function updateSubjectSelectionFields() {
+  const isCustom = $('subject').value === CUSTOM_SUBJECT_VALUE;
+  $('customEventFields').hidden = !isCustom;
+  $('customTitle').required = isCustom;
+  $('subjectHint').textContent = isCustom
+    ? 'Wydarzenie poza przedmiotem (np. spotkanie z promotorem, wizyta u lekarza, koło naukowe).'
+    : 'Nowy przedmiot oraz jego opis dodasz w przycisku „Przedmioty”.';
+
+  if (isCustom && !editingId && $('type').value === 'Laboratorium') {
+    $('type').value = 'Spotkanie';
+  }
+}
+
+function openEventDialog(id, initialDate = null, initialStart = null) {
   if (busy) return;
 
   if (!id && initialDate) {
@@ -453,11 +710,6 @@ function openEventDialog(id, initialDate = null) {
       setStatus(`Dzień ${initialDate} jest ustawiony jako wolny${reason} — dodawanie zajęć w tym dniu jest zablokowane.`);
       return;
     }
-  }
-
-  if (!state.plan.subjects.length) {
-    openSubjectDialog('Najpierw dodaj przedmiot, a następnie jego zajęcia.');
-    return;
   }
 
   editingId = id || null;
@@ -473,8 +725,15 @@ function openEventDialog(id, initialDate = null) {
     option.value = subject.id;
     select.append(option);
   }
+  const customOption = node(
+    'option',
+    '',
+    '★ Wydarzenie własne / poza przedmiotem (np. promotor, dentysta)',
+  );
+  customOption.value = CUSTOM_SUBJECT_VALUE;
+  select.append(customOption);
 
-  $('eventTitle').textContent = event ? 'Edytuj zajęcia' : 'Dodaj zajęcia';
+  $('eventTitle').textContent = event ? 'Edytuj zajęcia / wydarzenie' : 'Dodaj zajęcia lub wydarzenie';
   $('repeatFields').hidden = !!event;
   $('scopeLabel').hidden = !event;
   $('deleteEvent').hidden = !event;
@@ -488,12 +747,34 @@ function openEventDialog(id, initialDate = null) {
   const fallbackDate = findDefaultNonHolidayDate(todayInWeek ? t : week);
   $('date').value = event?.date || initialDate || fallbackDate;
 
-  if (event) {
-    for (const field of EVENT_FIELDS) $(field).value = event[field];
-    select.value = event.subjectId;
-    $('scope').value = 'one';
+  if (initialStart && !event) {
+    $('start').value = initialStart;
+    $('end').value = fromMinutes(Math.min(23 * 60 + 45, toMinutes(initialStart) + 90));
   }
 
+  if (event) {
+    for (const field of EVENT_FIELDS) $(field).value = event[field];
+    $('remote').checked = !!event.remote;
+    if (event.subjectId) {
+      select.value = event.subjectId;
+      $('customTitle').value = '';
+      $('customColor').value = DEFAULT_CUSTOM_COLOR;
+    } else {
+      select.value = CUSTOM_SUBJECT_VALUE;
+      $('customTitle').value = event.customTitle || '';
+      $('customColor').value = event.customColor || DEFAULT_CUSTOM_COLOR;
+    }
+    $('scope').value = 'one';
+  } else {
+    $('remote').checked = false;
+    $('customTitle').value = '';
+    $('customColor').value = DEFAULT_CUSTOM_COLOR;
+    if (!state.plan.subjects.length) {
+      select.value = CUSTOM_SUBJECT_VALUE;
+    }
+  }
+
+  updateSubjectSelectionFields();
   $('eventDialog').showModal();
 }
 
@@ -507,8 +788,9 @@ function updateRepeatFields() {
 }
 
 function readEventForm() {
-  return {
-    subjectId: $('subject').value,
+  const isCustom = $('subject').value === CUSTOM_SUBJECT_VALUE;
+  const base = {
+    subjectId: isCustom ? null : $('subject').value,
     type: $('type').value.trim(),
     date: $('date').value,
     start: $('start').value,
@@ -516,7 +798,13 @@ function readEventForm() {
     room: $('room').value.trim(),
     teacher: $('teacher').value.trim(),
     notes: $('notes').value.trim(),
+    remote: $('remote').checked,
   };
+  if (isCustom) {
+    base.customTitle = $('customTitle').value.trim();
+    base.customColor = $('customColor').value;
+  }
+  return base;
 }
 
 /**
@@ -563,7 +851,12 @@ function saveEvent(submitEvent) {
           if (shiftDays !== 0 && holidayFor(nextDate, plan.academicYear)) {
             return null;
           }
-          return { ...e, ...values, date: nextDate };
+          const updated = { ...e, ...values, date: nextDate };
+          if (values.subjectId) {
+            delete updated.customTitle;
+            delete updated.customColor;
+          }
+          return updated;
         }).filter(Boolean);
       } else {
         const repeatMode = $('repeat').value;
@@ -644,8 +937,7 @@ function renderSeriesList() {
     events.sort((a, b) => a.date.localeCompare(b.date));
     const first = events[0];
     const last = events[events.length - 1];
-    const subject = subjectMap.get(first.subjectId);
-    const subjectName = subject ? subject.name : 'Przedmiot';
+    const { title: subjectName } = getEventDisplay(first);
 
     const row = node('div', 'seriesrow');
     const info = node('div', 'seriesrow-info');
@@ -1078,6 +1370,7 @@ async function sync(direction) {
 function bindEvents() {
   $('editModeToggle').onclick = () => setEditMode(!editMode);
   $('addEvent').onclick = () => openEventDialog();
+  $('subject').onchange = updateSubjectSelectionFields;
   $('eventForm').onsubmit = saveEvent;
   $('deleteEvent').onclick = deleteEvent;
   $('repeat').onchange = updateRepeatFields;
