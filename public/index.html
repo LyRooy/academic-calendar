@@ -353,13 +353,28 @@
         </p>
 
         <label>
-          Klucz dostępu
+          Nazwa / ID planu (osoby)
+          <input
+            id="planId"
+            maxlength="60"
+            placeholder="domyślny (lub np. kacper, ania, semestr-zimowy)"
+            autocomplete="off"
+          >
+          <small>
+            Każda nazwa to osobny plan zapisany w chmurze R2 (dozwolone litery bez polskich znaków, cyfry, <code>-</code> i <code>_</code>).
+            Druga osoba może wpisać ten sam <code>PLAN_TOKEN</code> i podać własne ID, aby mieć swój niezależny plan.
+          </small>
+        </label>
+
+        <label>
+          Klucz dostępu (PLAN_TOKEN)
           <input id="token" type="password" minlength="32" maxlength="200" autocomplete="off">
         </label>
         <p class="hint">
-          Klucz zostanie zapisany w tej przeglądarce. Używaj tej opcji na własnych urządzeniach.
-          Puste pole usuwa zapisany klucz.
+          Klucz oraz ID planu zostaną zapisane w tej przeglądarce. Puste pole klucza usuwa zapisany klucz.
         </p>
+
+        <p id="connectionError" class="error" role="alert"></p>
 
         <button type="submit" class="primary">Zapisz ustawienie</button>
       </form>

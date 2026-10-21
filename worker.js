@@ -6,9 +6,8 @@
 //   env.PLANS      – bucket R2
 //   env.PLAN_TOKEN – sekret (min. 32 znaki), ustawiany przez `wrangler secret put PLAN_TOKEN`
 
-import { emptyPlan, validatePlan } from './public/model.js';
+import { emptyPlan, validatePlan, resolvePlanKey } from './public/model.js';
 
-const PLAN_KEY = 'plan.json';
 const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
 const MIN_TOKEN_LENGTH = 32;
 const ETAG_PATTERN = /^"[a-f0-9]{32}"$/;
@@ -77,8 +76,8 @@ async function readBodyWithLimit(request, maxBytes) {
 
 // --- Obsługa metod ------------------------------------------------------------
 
-async function getPlan(env) {
-  const object = await env.PLANS.get(PLAN_KEY);
+async function getPlan(env, planKey) {
+  const object = await env.PLANS.get(planKey);
   if (!object) return reply({ plan: emptyPlan(), etag: null });
 
   let plan;
@@ -90,7 +89,7 @@ async function getPlan(env) {
   return reply({ plan, etag: object.etag });
 }
 
-async function putPlan(request, env) {
+async function putPlan(request, env, planKey) {
   // Klient musi podać wersję: If-Match "<etag>" (aktualizacja) albo If-None-Match * (pierwszy zapis).
   const ifMatch = request.headers.get('If-Match');
   const ifNoneMatch = request.headers.get('If-None-Match');
@@ -118,7 +117,7 @@ async function putPlan(request, env) {
 
   // R2 sprawdza warunek atomowo — nie ma wyścigu między odczytem a zapisem.
   const onlyIf = new Headers(isUpdate ? { 'If-Match': ifMatch } : { 'If-None-Match': '*' });
-  const saved = await env.PLANS.put(PLAN_KEY, JSON.stringify(plan), {
+  const saved = await env.PLANS.put(planKey, JSON.stringify(plan), {
     onlyIf,
     httpMetadata: { contentType: 'application/json' },
   });
@@ -152,13 +151,20 @@ export default {
     const origin = request.headers.get('Origin');
     if (origin && origin !== url.origin) return error('Niedozwolone źródło żądania.', 403);
 
+    let planKey;
+    try {
+      planKey = resolvePlanKey(url.searchParams.get('id'));
+    } catch (e) {
+      return error(e.message, 400);
+    }
+
     try {
       if (!env.PLANS) {
         console.error('Błąd: Brak powiązania R2 env.PLANS w konfiguracji Workera.');
         return error('Brak powiązania magazynu R2 (PLANS) w konfiguracji Workera.', 503);
       }
-      if (request.method === 'GET') return await getPlan(env);
-      if (request.method === 'PUT') return await putPlan(request, env);
+      if (request.method === 'GET') return await getPlan(env, planKey);
+      if (request.method === 'PUT') return await putPlan(request, env, planKey);
       return error('Dozwolone GET i PUT.', 405, { Allow: 'GET, PUT' });
     } catch (err) {
       console.error('Błąd operacji R2:', err);

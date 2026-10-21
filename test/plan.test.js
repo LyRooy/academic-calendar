@@ -30,33 +30,37 @@ function samplePlan() {
   };
 }
 
-/** Atrapa bucketu R2 z obsługą warunków If-Match / If-None-Match. */
+/** Atrapa bucketu R2 z obsługą wielu kluczy oraz warunków If-Match / If-None-Match. */
 function createEnv() {
-  let current = null;
+  const store = new Map();
 
   const PLANS = {
-    async get() {
+    async get(key) {
+      const current = store.get(key);
       if (!current) return null;
       return { etag: current.etag, json: async () => JSON.parse(current.body) };
     },
 
     async put(key, body, options) {
+      const current = store.get(key);
       const ifMatch = options.onlyIf.get('If-Match');
       const ifNoneMatch = options.onlyIf.get('If-None-Match');
 
       if (ifNoneMatch === '*' && current) return null;
       if (ifMatch && ifMatch !== `"${current?.etag}"`) return null;
 
-      current = { body, etag: createHash('md5').update(body).digest('hex') };
-      return { etag: current.etag };
+      const saved = { body, etag: createHash('md5').update(body).digest('hex') };
+      store.set(key, saved);
+      return { etag: saved.etag };
     },
   };
 
   return { PLAN_TOKEN: TOKEN, PLANS };
 }
 
-function request(method = 'GET', body, extraHeaders = {}, token = TOKEN) {
-  return new Request('https://plan.example/api/plan', {
+function request(method = 'GET', body, extraHeaders = {}, token = TOKEN, planId = '') {
+  const query = planId ? `?id=${encodeURIComponent(planId)}` : '';
+  return new Request(`https://plan.example/api/plan${query}`, {
     method,
     headers: {
       Authorization: 'Bearer ' + token,
@@ -153,8 +157,13 @@ test('datesFor respektuje święta, przerwy i dni z zamianą planu', () => {
   // Powinny być: 14 (środa) i 27 (wtorek realizujący środę). 21 (wolne) i 28 (środa realizująca piątek) pominięte!
   assert.deepEqual(dates, ['2026-10-14', '2026-10-27']);
 
-  // Blokada dodania pojedynczych zajęć w dniu wolnym
-  assert.throws(() => datesFor('2026-10-21', '', 'once', '', academicYear, true), /dzień wolny/);
+  // Blokada dodania pojedynczych zajęć przedmiotu w dniu wolnym oraz w weekend (2026-10-17 to sobota)
+  assert.throws(() => datesFor('2026-10-21', '', 'once', '', academicYear, true, false), /dzień wolny/);
+  assert.throws(() => datesFor('2026-10-17', '', 'once', '', academicYear, true, false), /dzień wolny/);
+
+  // Wydarzenie własne (isCustom = true) można dodać w weekend oraz w dzień wolny
+  assert.deepEqual(datesFor('2026-10-17', '', 'once', '', academicYear, true, true), ['2026-10-17']);
+  assert.deepEqual(datesFor('2026-10-21', '', 'once', '', academicYear, true, true), ['2026-10-21']);
 });
 
 test('reconcileWithAcademicYear dopasowuje istniejące serie i przedmioty obsługują opis details oraz remote', () => {
@@ -248,6 +257,23 @@ test('pierwszy zapis, odczyt i aktualizacja', async () => {
 
   const saved = await (await call(request(), env)).json();
   assert.equal(saved.plan.events[0].room, '2');
+
+  // Osobny plan w chmurze dla drugiej osoby po podaniu nazwy/ID (?id=ania)
+  const aniaPlan = samplePlan();
+  aniaPlan.events[0].room = 'Sala-Ania';
+  const aniaSave = await call(request('PUT', aniaPlan, { 'If-None-Match': '*' }, TOKEN, 'ania'), env);
+  assert.equal(aniaSave.status, 200);
+
+  const aniaRead = await (await call(request('GET', undefined, {}, TOKEN, 'ania'), env)).json();
+  assert.equal(aniaRead.plan.events[0].room, 'Sala-Ania');
+
+  // Domyślny plan pozostaje nienaruszony
+  const defaultRead = await (await call(request(), env)).json();
+  assert.equal(defaultRead.plan.events[0].room, '2');
+
+  // Nieprawidłowe znaki w ID planu są odrzucane (400)
+  const badId = await call(request('GET', undefined, {}, TOKEN, '../bad id!'), env);
+  assert.equal(badId.status, 400);
 });
 
 test('dwa urządzenia: jeden zapis starej wersji przechodzi', async () => {

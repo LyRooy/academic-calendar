@@ -9,12 +9,14 @@ import {
   monday,
   holidayFor,
   reconcileWithAcademicYear,
+  resolvePlanKey,
 } from './model.js';
 
 // --- Stałe i stan ------------------------------------------------------------
 
 const STORAGE_KEY = 'student-calendar-v1';
 const TOKEN_KEY = 'student-calendar-token';
+const PLAN_ID_KEY = 'student-calendar-plan-id';
 const API_URL = '/api/plan'; // ten sam adres co frontend — Worker obsługuje oba
 const API_TIMEOUT_MS = 20_000;
 const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
@@ -155,12 +157,12 @@ const DAY_KEY_NAMES = {
   sun: 'niedzieli',
 };
 
-// --- Widok tygodnia (oś godzin co 15 min, zajęcia proporcjonalne i okienka) --
+// --- Widok tygodnia (oś godzin co 5 min, zajęcia proporcjonalne i okienka) ---
 
-const SLOT_MINUTES = 15;
-const SLOT_HEIGHT_PX = 20;
-const DEFAULT_START_MIN = 7 * 60; // 07:00
-const DEFAULT_END_MIN = 20 * 60;  // 20:00
+const SLOT_MINUTES = 5;
+const SLOT_HEIGHT_PX = 15; // 5 min = 15px → 15 min = 45px, 45 min = 135px, 60 min = 180px
+const DEFAULT_START_MIN = 8 * 60; // 08:00
+const DEFAULT_END_MIN = 16 * 60;  // 16:00
 
 function fromMinutes(total) {
   const clamped = Math.max(0, Math.min(23 * 60 + 59, Math.round(total)));
@@ -280,9 +282,14 @@ function renderTimeColumn(gridStartMin, gridEndMin) {
   const slots = node('div', 'time-slots');
   for (let m = gridStartMin; m < gridEndMin; m += SLOT_MINUTES) {
     const isFullHour = m % 60 === 0;
+    const isQuarter = m % 15 === 0;
     const label = isFullHour ? fromMinutes(m) : `:${String(m % 60).padStart(2, '0')}`;
-    const slot = node('div', isFullHour ? 'time-slot hour' : 'time-slot quarter', label);
-    slots.append(slot);
+    const slotClass = isFullHour
+      ? 'time-slot hour'
+      : isQuarter
+        ? 'time-slot quarter'
+        : 'time-slot five';
+    slots.append(node('div', slotClass, label));
   }
 
   col.append(slots);
@@ -305,7 +312,7 @@ function render() {
   let totalGapMinutes = 0;
   for (let i = 0; i < 7; i++) {
     const d = addDays(week, i);
-    if (specialDayMap.has(d)) weekHasSpecialDay = true;
+    if (specialDayMap.has(d) || holidayFor(d, state.plan.academicYear)) weekHasSpecialDay = true;
     const dayEvs = events.filter((e) => e.date === d);
     for (const g of computeGaps(dayEvs)) {
       totalGapCount++;
@@ -327,14 +334,15 @@ function render() {
 
   for (let i = 0; i < 7; i++) {
     const date = addDays(week, i);
-    calendar.append(renderDay(date, DAY_NAMES[i], events, specialDayMap.get(date), startMin, endMin));
+    const effectiveSpecial = specialDayMap.get(date) || holidayFor(date, state.plan.academicYear);
+    calendar.append(renderDay(date, DAY_NAMES[i], events, effectiveSpecial, startMin, endMin));
   }
 }
 
 function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndMin) {
   const isHoliday = specialDay?.type === 'holiday';
   const isSwap = specialDay?.type === 'swap';
-  const canAddInDay = editMode && !isHoliday;
+  const canAddInDay = editMode;
 
   let dayClass = 'day';
   if (date === today()) dayClass += ' today';
@@ -349,20 +357,20 @@ function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndM
   head.append(headInfo);
 
   if (canAddInDay) {
-    head.title = `Kliknij, aby dodać zajęcia w dniu ${date} (${dayName})`;
+    head.title = isHoliday
+      ? `Dzień wolny (${date}) — kliknij, aby dodać wydarzenie własne (poza przedmiotem)`
+      : `Kliknij, aby dodać zajęcia w dniu ${date} (${dayName})`;
     head.onclick = () => openEventDialog(null, date);
 
     const addHint = node('span', 'dayhead-add');
     addHint.innerHTML = '<i class="ph ph-plus"></i>';
-    addHint.title = 'Dodaj zajęcia w tym dniu';
+    addHint.title = isHoliday ? 'Dodaj wydarzenie własne' : 'Dodaj zajęcia w tym dniu';
     head.append(addHint);
-  } else if (editMode && isHoliday) {
-    head.title = 'Dzień wolny od zajęć — dodawanie zajęć zablokowane';
   }
 
   topWrap.append(head);
 
-  // Oznaczenie dnia specjalnego (święto lub plan z innego dnia)
+  // Oznaczenie dnia specjalnego (święto, weekend lub plan z innego dnia)
   if (specialDay) {
     const badge = node('div', `special-day-badge ${specialDay.type}`);
     if (isHoliday) {
@@ -386,7 +394,9 @@ function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndM
   timeline.style.height = `${totalSlots * SLOT_HEIGHT_PX}px`;
 
   if (canAddInDay) {
-    timeline.title = 'Kliknij w wiersz godziny, aby dodać zajęcia o tej porze';
+    timeline.title = isHoliday
+      ? 'Kliknij w wiersz godziny, aby dodać wydarzenie własne o tej porze'
+      : 'Kliknij w wiersz godziny, aby dodać zajęcia o tej porze';
     timeline.onclick = (e) => {
       if (e.target !== timeline) return;
       const slotIndex = Math.max(0, Math.min(totalSlots - 2, Math.floor(e.offsetY / SLOT_HEIGHT_PX)));
@@ -412,7 +422,7 @@ function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndM
     title.append(document.createTextNode(`Okienko · ${formatDuration(gap.durationMin)}`));
     gapEl.append(title);
 
-    if (gap.durationMin >= 30) {
+    if (gap.durationMin >= 10) {
       gapEl.append(node('span', 'gap-time', `${fromMinutes(gap.startMin)} – ${fromMinutes(gap.endMin)}`));
     }
     timeline.append(gapEl);
@@ -424,16 +434,18 @@ function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndM
   }
 
   if (!dayEvents.length) {
-    if (isHoliday) {
+    if (editMode) {
+      const emptyBtn = node('button', 'day-empty-btn');
+      emptyBtn.type = 'button';
+      emptyBtn.innerHTML = isHoliday
+        ? '<i class="ph ph-plus-circle"></i> Dodaj wydarzenie własne'
+        : '<i class="ph ph-plus-circle"></i> Dodaj zajęcia';
+      emptyBtn.onclick = () => openEventDialog(null, date);
+      timeline.append(emptyBtn);
+    } else if (isHoliday) {
       const emptyHoliday = node('div', 'day-empty-overlay');
       emptyHoliday.innerHTML = '<i class="ph ph-sun-horizon"></i> Dzień wolny od zajęć';
       timeline.append(emptyHoliday);
-    } else if (editMode) {
-      const emptyBtn = node('button', 'day-empty-btn');
-      emptyBtn.type = 'button';
-      emptyBtn.innerHTML = '<i class="ph ph-plus-circle"></i> Dodaj zajęcia';
-      emptyBtn.onclick = () => openEventDialog(null, date);
-      timeline.append(emptyBtn);
     } else {
       const emptyNormal = node('div', 'day-empty-overlay', 'Brak zajęć');
       timeline.append(emptyNormal);
@@ -477,7 +489,7 @@ function renderEvent(event, layout, gridStartMin) {
   let className = 'event';
   if (event.remote) className += ' remote';
   if (isCustom) className += ' custom-event';
-  if (durationMin < 45) className += ' compact';
+  if (durationMin < 20) className += ' compact';
 
   const button = node('button', className);
   button.type = 'button';
@@ -500,19 +512,19 @@ function renderEvent(event, layout, gridStartMin) {
     topRow.append(remoteTag);
   }
 
-  button.append(topRow, node('span', 'name', title));
+  button.append(
+    topRow,
+    node('span', 'name', title),
+    node('span', 'type', event.remote ? `${event.type} · Zdalnie` : event.type),
+  );
 
-  if (durationMin >= 30) {
-    button.append(node('span', 'type', event.remote ? `${event.type} · Zdalnie` : event.type));
-  }
-
-  if (durationMin >= 45 && (event.room || event.teacher)) {
+  if (event.room || event.teacher) {
     button.append(node('span', 'meta', [event.room, event.teacher].filter(Boolean).join(' · ')));
   }
 
   if (overlaps) button.append(node('span', 'meta', '⚠ Nakładające się godziny'));
 
-  if (durationMin >= 60 && event.notes) button.append(node('span', 'meta', event.notes));
+  if (event.notes) button.append(node('span', 'meta', event.notes));
 
   button.onclick = (e) => {
     e.stopPropagation();
@@ -703,15 +715,6 @@ function updateSubjectSelectionFields() {
 function openEventDialog(id, initialDate = null, initialStart = null) {
   if (busy) return;
 
-  if (!id && initialDate) {
-    const holiday = holidayFor(initialDate, state.plan.academicYear);
-    if (holiday) {
-      const reason = holiday.label ? ` (${holiday.label})` : '';
-      setStatus(`Dzień ${initialDate} jest ustawiony jako wolny${reason} — dodawanie zajęć w tym dniu jest zablokowane.`);
-      return;
-    }
-  }
-
   editingId = id || null;
   const event = state.plan.events.find((e) => e.id === id);
 
@@ -745,7 +748,8 @@ function openEventDialog(id, initialDate = null, initialStart = null) {
   const t = today();
   const todayInWeek = t >= week && t <= addDays(week, 6);
   const fallbackDate = findDefaultNonHolidayDate(todayInWeek ? t : week);
-  $('date').value = event?.date || initialDate || fallbackDate;
+  const targetDate = event?.date || initialDate || fallbackDate;
+  $('date').value = targetDate;
 
   if (initialStart && !event) {
     $('start').value = initialStart;
@@ -769,7 +773,8 @@ function openEventDialog(id, initialDate = null, initialStart = null) {
     $('remote').checked = false;
     $('customTitle').value = '';
     $('customColor').value = DEFAULT_CUSTOM_COLOR;
-    if (!state.plan.subjects.length) {
+    const isTargetHoliday = !!holidayFor(targetDate, state.plan.academicYear);
+    if (!state.plan.subjects.length || isTargetHoliday) {
       select.value = CUSTOM_SUBJECT_VALUE;
     }
   }
@@ -829,6 +834,7 @@ function saveEvent(submitEvent) {
     }
 
     const applyAcademicYear = $('applyAcademicYear').checked;
+    const isCustom = !values.subjectId;
 
     mutate((plan) => {
       if (editingId) {
@@ -836,19 +842,21 @@ function saveEvent(submitEvent) {
         const scope = $('scope').value;
         const shiftDays = Math.round((Date.parse(values.date) - Date.parse(original.date)) / 86_400_000);
 
-        if (shiftDays !== 0) {
+        if (!isCustom && shiftDays !== 0) {
           const targetHoliday = holidayFor(values.date, plan.academicYear);
           if (targetHoliday) {
             const reason = targetHoliday.label ? ` (${targetHoliday.label})` : '';
-            throw Error(`${values.date} to dzień wolny${reason}. Nie można przenieść zajęć na dzień wolny.`);
+            throw Error(
+              `${values.date} to dzień wolny${reason}. W weekendy i dni wolne można dodawać wyłącznie wydarzenia własne (poza przedmiotem).`,
+            );
           }
         }
 
         plan.events = plan.events.map((e) => {
           if (!inScope(e, original, scope)) return e;
           const nextDate = addDays(e.date, shiftDays);
-          // Jeśli przesuwamy serię i któryś z docelowych dni jest dniem wolnym, pomijamy przesunięcie na dzień wolny
-          if (shiftDays !== 0 && holidayFor(nextDate, plan.academicYear)) {
+          // Jeśli przesuwamy serię zajęć przedmiotu i któryś z docelowych dni jest dniem wolnym, pomijamy go
+          if (!isCustom && shiftDays !== 0 && holidayFor(nextDate, plan.academicYear)) {
             return null;
           }
           const updated = { ...e, ...values, date: nextDate };
@@ -860,13 +868,13 @@ function saveEvent(submitEvent) {
         }).filter(Boolean);
       } else {
         const repeatMode = $('repeat').value;
-        // Blokada rozpoczęcia powtarzania lub pojedynczych zajęć w dniu ustawionym jako wolny
-        if (applyAcademicYear) {
+        // Blokada rozpoczęcia powtarzania lub pojedynczych zajęć przedmiotu w dniu wolnym lub w weekend
+        if (!isCustom && applyAcademicYear) {
           const startHoliday = holidayFor(values.date, plan.academicYear);
           if (startHoliday) {
             const reason = startHoliday.label ? ` (${startHoliday.label})` : '';
             throw Error(
-              `Wybrany dzień (${values.date}) jest ustawiony jako wolny${reason}. Wybierz dzień, w którym odbywają się zajęcia.`,
+              `Wybrany dzień (${values.date}) jest ustawiony jako wolny${reason}. W weekendy i dni wolne można dodawać wyłącznie wydarzenia własne (poza przedmiotem).`,
             );
           }
         }
@@ -879,6 +887,7 @@ function saveEvent(submitEvent) {
           $('manual').value,
           plan.academicYear,
           applyAcademicYear,
+          isCustom,
         );
         for (const date of dates) {
           plan.events.push({ ...values, date, id: uid(), seriesId });
@@ -1265,9 +1274,26 @@ async function importPlan() {
 
 // --- Klucz dostępu i synchronizacja z chmurą ---------------------------------
 
+function getActivePlanId() {
+  try {
+    return (localStorage.getItem(PLAN_ID_KEY) || '').trim().toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function updateConnectionButtonLabel() {
+  const id = getActivePlanId();
+  const btn = $('connection');
+  btn.innerHTML = '<i class="ph ph-key"></i> ';
+  btn.append(document.createTextNode(id ? `Chmura (${id})` : 'Klucz / ID planu'));
+}
+
 function openConnectionDialog() {
   try {
+    $('planId').value = getActivePlanId();
     $('token').value = localStorage.getItem(TOKEN_KEY) || '';
+    $('connectionError').textContent = '';
     $('connectionDialog').showModal();
   } catch (err) {
     setStatus(err.message);
@@ -1277,18 +1303,35 @@ function openConnectionDialog() {
 function saveConnection(event) {
   event.preventDefault();
   try {
+    const rawPlanId = $('planId').value.trim().toLowerCase();
+    // Walidacja formatu nazwy/ID planu
+    resolvePlanKey(rawPlanId);
+
     const token = $('token').value.trim();
     if (token && token.length < MIN_TOKEN_LENGTH) {
       throw Error(`Klucz musi mieć minimum ${MIN_TOKEN_LENGTH} znaki.`);
     }
 
+    const prevPlanId = getActivePlanId();
+    if (rawPlanId) localStorage.setItem(PLAN_ID_KEY, rawPlanId);
+    else localStorage.removeItem(PLAN_ID_KEY);
+
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else localStorage.removeItem(TOKEN_KEY);
 
+    if (rawPlanId !== prevPlanId) {
+      const next = clone(state);
+      next.etag = null;
+      persist(next);
+    }
+
+    updateConnectionButtonLabel();
+    $('connectionError').textContent = '';
     $('connectionDialog').close();
-    setStatus('Ustawienie zapisane. Teraz pobierz plan lub zapisz lokalny plan w chmurze.');
+    const label = rawPlanId || 'domyślny';
+    setStatus(`Zapisano ustawienia chmury (plan: ${label}). Możesz teraz pobrać lub zapisać plan w chmurze.`);
   } catch (err) {
-    setStatus(err.message);
+    $('connectionError').textContent = err.message;
   }
 }
 
@@ -1297,7 +1340,8 @@ function setButtonsDisabled(disabled) {
 }
 
 /** Wysyła żądanie do Workera. direction: 'pull' (GET) lub 'push' (PUT). */
-async function callApi(direction, token) {
+async function callApi(direction, token, planId, overrideEtag = undefined) {
+  const url = planId ? `${API_URL}?id=${encodeURIComponent(planId)}` : API_URL;
   const headers = { Authorization: 'Bearer ' + token };
   const options = { method: 'GET', headers, cache: 'no-store', signal: AbortSignal.timeout(API_TIMEOUT_MS) };
 
@@ -1305,12 +1349,12 @@ async function callApi(direction, token) {
     options.method = 'PUT';
     options.body = JSON.stringify(state.plan);
     headers['Content-Type'] = 'application/json';
-    // Zapis warunkowy: nadpisz tylko wersję, którą znamy; przy pierwszym zapisie — tylko gdy pliku nie ma.
-    if (state.etag) headers['If-Match'] = `"${state.etag}"`;
+    const etagToUse = overrideEtag !== undefined ? overrideEtag : state.etag;
+    if (etagToUse) headers['If-Match'] = `"${etagToUse}"`;
     else headers['If-None-Match'] = '*';
   }
 
-  const response = await fetch(API_URL, options);
+  const response = await fetch(url, options);
 
   let data;
   try {
@@ -1318,6 +1362,19 @@ async function callApi(direction, token) {
   } catch {
     throw Error('API nie jest dostępne. Uruchom projekt przez npm run dev albo wdróż Worker.');
   }
+
+  if (direction === 'push' && response.status === 409 && overrideEtag === undefined) {
+    const label = planId || 'domyślny';
+    if (
+      confirm(
+        `W chmurze dla planu „${label}” znajduje się już inna zapisana wersja. Czy chcesz ją nadpisać swoim obecnym planem lokalnym?`,
+      )
+    ) {
+      const remote = await callApi('pull', token, planId);
+      return callApi('push', token, planId, remote.etag);
+    }
+  }
+
   if (!response.ok) throw Error(data.error || 'Błąd połączenia.');
   return data;
 }
@@ -1327,9 +1384,11 @@ async function sync(direction) {
   try {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
-      $('connectionDialog').showModal();
+      openConnectionDialog();
       return;
     }
+    const planId = getActivePlanId();
+    const label = planId || 'domyślny';
 
     if (
       direction === 'pull' &&
@@ -1341,9 +1400,9 @@ async function sync(direction) {
 
     busy = true;
     setButtonsDisabled(true);
-    setStatus(direction === 'pull' ? 'Pobieranie planu…' : 'Zapisywanie planu…');
+    setStatus(direction === 'pull' ? `Pobieranie planu (${label})…` : `Zapisywanie planu (${label})…`);
 
-    const data = await callApi(direction, token);
+    const data = await callApi(direction, token, planId);
 
     const next = clone(state);
     if (direction === 'pull') next.plan = validatePlan(data.plan);
@@ -1352,7 +1411,7 @@ async function sync(direction) {
     persist(next);
 
     render();
-    setStatus(`Zsynchronizowano · ${new Date().toLocaleTimeString('pl-PL')}.`);
+    setStatus(`Zsynchronizowano plan „${label}” · ${new Date().toLocaleTimeString('pl-PL')}.`);
   } catch (err) {
     if (err.name === 'TimeoutError') {
       setStatus('Przekroczono czas połączenia. Lokalny plan pozostał bez zmian.');
@@ -1434,5 +1493,6 @@ function bindEvents() {
 
 loadFromStorage();
 bindEvents();
+updateConnectionButtonLabel();
 setEditMode(false);
 reportState();

@@ -32,10 +32,11 @@
   --remote-border: #bdc7bd;
   --gap-bg: #e4ebe299;
   --gap-border: #c5d1c3;
-  --grid-quarter: #e9eee6;
-  --grid-hour: #d5ded2;
+  --grid-five: #eef2eb;
+  --grid-quarter: #dde4d9;
+  --grid-hour: #c2cec0;
   --today-border: #5a8d70;
-  --slot-height: 20px;
+  --slot-height: 15px;
   --head-height: 52px;
 
   --shadow: #12382725;
@@ -73,11 +74,12 @@
   --event-bg: #1b2724;
   --event-border: #2b3b36;
   --remote-bg: #111917;
-  --remote-border: #25332f;
-  --gap-bg: #131d1acc;
-  --gap-border: #2a3c36;
-  --grid-quarter: #1b2824;
-  --grid-hour: #283934;
+  --remote-border: #2a3c36;
+  --gap-bg: #15211ecc;
+  --gap-border: #314740;
+  --grid-five: #15201d;
+  --grid-quarter: #1f2f2b;
+  --grid-hour: #2e443e;
   --today-border: #4f9a7a;
 
   --shadow: #00000080;
@@ -390,7 +392,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 0 8px;
+  padding: 0 7px;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
@@ -408,9 +410,17 @@ textarea:focus-visible {
 }
 
 .time-slot.quarter {
-  font-size: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  border-top: 1px solid var(--grid-quarter);
+  background: #ffffff08;
+}
+
+.time-slot.five {
+  font-size: 8.5px;
   color: var(--faint);
-  border-top: 1px dashed var(--grid-quarter);
+  border-top: 1px dotted var(--grid-five);
 }
 
 /* Kolumna pojedynczego dnia */
@@ -533,7 +543,7 @@ textarea:focus-visible {
   border-top-color: var(--accent);
 }
 
-/* Siatka 15-minutowa dla pojedynczego dnia */
+/* Siatka 5-minutowa dla pojedynczego dnia (12 wierszy po 5 min na godzinę, co 3 wiersze = kwadrans) */
 .day-timeline {
   position: relative;
   width: 100%;
@@ -541,16 +551,23 @@ textarea:focus-visible {
     repeating-linear-gradient(
       to bottom,
       transparent 0,
-      transparent calc(var(--slot-height) * 4 - 1px),
-      var(--grid-hour) calc(var(--slot-height) * 4 - 1px),
-      var(--grid-hour) calc(var(--slot-height) * 4)
+      transparent calc(var(--slot-height) * 12 - 1px),
+      var(--grid-hour) calc(var(--slot-height) * 12 - 1px),
+      var(--grid-hour) calc(var(--slot-height) * 12)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--slot-height) * 3 - 1px),
+      var(--grid-quarter) calc(var(--slot-height) * 3 - 1px),
+      var(--grid-quarter) calc(var(--slot-height) * 3)
     ),
     repeating-linear-gradient(
       to bottom,
       transparent 0,
       transparent calc(var(--slot-height) - 1px),
-      var(--grid-quarter) calc(var(--slot-height) - 1px),
-      var(--grid-quarter) var(--slot-height)
+      var(--grid-five) calc(var(--slot-height) - 1px),
+      var(--grid-five) var(--slot-height)
     );
 }
 
@@ -605,19 +622,19 @@ textarea:focus-visible {
   background: repeating-linear-gradient(
     -45deg,
     var(--gap-bg),
-    var(--gap-bg) 6px,
-    transparent 6px,
-    transparent 12px
+    var(--gap-bg) 7px,
+    transparent 7px,
+    transparent 14px
   );
   border: 1px dashed var(--gap-border);
-  border-radius: 7px;
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 2px 6px;
-  color: var(--muted);
+  gap: 3px;
+  padding: 4px 8px;
+  color: var(--text);
   text-align: center;
   overflow: hidden;
   z-index: 1;
@@ -625,7 +642,7 @@ textarea:focus-visible {
 }
 
 .gap-block .gap-title {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.4px;
@@ -633,12 +650,14 @@ textarea:focus-visible {
   align-items: center;
   gap: 4px;
   line-height: 1.2;
+  color: var(--text);
 }
 
 .gap-block .gap-time {
-  font-size: 10px;
-  color: var(--faint);
-  line-height: 1.1;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.2;
 }
 
 /* Pojedyncze zajęcia na osi czasu — wysokość odpowiada czasowi trwania */
@@ -648,15 +667,18 @@ textarea:focus-visible {
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
+  gap: 3px;
   text-align: left;
   border: 1px solid var(--event-border);
   border-left: 4px solid var(--event-color);
   border-radius: 8px;
-  padding: 6px 8px;
+  padding: 8px 10px;
   background: var(--event-bg);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
   z-index: 2;
-  box-shadow: 0 2px 6px #0000000d;
+  box-shadow: 0 2px 6px #00000014;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
@@ -665,13 +687,12 @@ textarea:focus-visible {
   box-shadow: 0 4px 12px var(--shadow);
 }
 
-/* Zajęcia zdalne (przyciemnione) */
+/* Zajęcia zdalne (przyciemnione, ale w pełni czytelne) */
 .event.remote {
   background: var(--remote-bg);
   border-color: var(--remote-border);
   border-left: 4px dashed var(--event-color);
-  color: var(--muted);
-  opacity: 0.88;
+  color: var(--text);
 }
 
 .event-top-row {
@@ -680,11 +701,11 @@ textarea:focus-visible {
   justify-content: space-between;
   gap: 4px;
   width: 100%;
-  margin-bottom: 3px;
+  margin-bottom: 1px;
 }
 
 .event .time {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
@@ -694,11 +715,11 @@ textarea:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.3px;
-  padding: 1px 5px;
+  padding: 2px 6px;
   border-radius: 4px;
   background: var(--surface);
   color: var(--text);
@@ -708,27 +729,29 @@ textarea:focus-visible {
 
 .event .name {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
 .event .type {
   display: block;
-  font-size: 9.5px;
+  font-size: 10.5px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  margin-top: 3px;
+  margin-top: 1px;
   color: var(--muted);
 }
 
 .event .meta {
   display: block;
-  font-size: 10px;
-  font-weight: 400;
-  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 1px;
   color: var(--muted);
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 

@@ -23,8 +23,22 @@ const MAX_DATE = '2100-12-31';
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ID_PATTERN = /^[a-zA-Z0-9_-]{1,80}$/;
+export const PLAN_ID_PATTERN = /^[a-zA-Z0-9_-]{1,60}$/;
 const COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 const DAY_OF_WEEK_PATTERN = /^(mon|tue|wed|thu|fri|sat|sun)$/;
+
+/**
+ * Wyznacza klucz obiektu w R2 na podstawie opcjonalnej nazwy/ID planu.
+ * Puste ID lub 'default' wskazuje na domyślny 'plan.json' (pełna kompatybilność wsteczna).
+ */
+export function resolvePlanKey(rawId) {
+  const cleaned = (rawId ?? '').trim();
+  if (!cleaned || cleaned.toLowerCase() === 'default') return 'plan.json';
+  if (!PLAN_ID_PATTERN.test(cleaned)) {
+    throw Error('Nazwa planu może zawierać tylko litery (bez polskich znaków), cyfry, myślnik i podkreślenie (maks. 60 znaków).');
+  }
+  return `plans/${cleaned.toLowerCase()}.json`;
+}
 
 export const emptyPlan = () => ({
   schemaVersion: SCHEMA_VERSION,
@@ -66,6 +80,12 @@ export function getDayOfWeekKey(date) {
   return WEEKDAY_KEYS[new Date(date + 'T12:00:00Z').getUTCDay()];
 }
 
+/** Sprawdza, czy podana data przypada w weekend (sobota lub niedziela). */
+export function isWeekend(date) {
+  const key = getDayOfWeekKey(date);
+  return key === 'sat' || key === 'sun';
+}
+
 /** Liczba pełnych tygodni między tygodniami, do których należą daty `a` i `b`. */
 function weeksBetween(a, b) {
   return Math.round((Date.parse(monday(b)) - Date.parse(monday(a))) / (7 * DAY_MS));
@@ -78,7 +98,7 @@ function specialDayMap(academicYear) {
 
 /**
  * Który dzień planu obowiązuje w danej dacie według struktury roku:
- *  - null       → dzień wolny (święto, przerwa),
+ *  - null       → dzień wolny (święto, przerwa lub domyślnie weekend bez zamiany planu),
  *  - targetDay  → dzień z zamianą planu (np. wtorek realizowany wg planu ze środy → 'wed'),
  *  - inaczej    → zwykły dzień tygodnia tej daty.
  */
@@ -86,27 +106,31 @@ export function effectiveDayKey(date, academicYear, map = specialDayMap(academic
   const special = map.get(date);
   if (special?.type === 'holiday') return null;
   if (special?.type === 'swap') return special.targetDay;
+  if (isWeekend(date)) return null;
   return getDayOfWeekKey(date);
 }
 
-/** Zwraca wpis dnia wolnego dla daty albo null. */
+/** Zwraca wpis dnia wolnego dla daty (w tym domyślnie każdy weekend, o ile nie ma zamiany planu) albo null. */
 export function holidayFor(date, academicYear) {
   const special = specialDayMap(academicYear).get(date);
-  return special?.type === 'holiday' ? special : null;
+  if (special?.type === 'holiday') return special;
+  if (special?.type === 'swap') return null;
+  if (isWeekend(date)) return { date, type: 'holiday', label: 'Weekend', isWeekend: true };
+  return null;
 }
 
 function holidayError(date, holiday) {
   const reason = holiday.label ? ` (${holiday.label})` : '';
   return Error(
-    `${date} to dzień wolny${reason}. Wybierz inną datę albo odznacz „Dopasuj do struktury roku”.`,
+    `${date} to dzień wolny${reason}. W dni wolne i weekendy można dodawać tylko wydarzenia własne (poza przedmiotem).`,
   );
 }
 
 /**
  * Generuje listę dat spotkań.
  *
- * Gdy `applyAcademicYear` jest włączone:
- *  - dni wolne (święta, przerwy) są pomijane, a pojedynczego terminu nie da się w nich dodać,
+ * Gdy `applyAcademicYear` jest włączone (i nie jest to wydarzenie własne `isCustom`):
+ *  - dni wolne oraz weekendy są pomijane, a pojedynczego terminu przedmiotu nie da się w nich dodać,
  *  - w dniu z zamianą planu (np. środa wg planu z piątku) zajęcia środowe nie odbywają się,
  *  - zajęcia „przeskakują” na dzień, który realizuje plan ich dnia tygodnia
  *    (np. wtorek wg planu ze środy dostaje zajęcia środowe) — także przy powtarzaniu co 2 tygodnie.
@@ -117,16 +141,28 @@ function holidayError(date, holiday) {
  * @param {string} manual lista dat oddzielonych przecinkami/spacjami (dla trybu manual)
  * @param {object} [academicYear] struktura roku z tablicą specialDays
  * @param {boolean} [applyAcademicYear=true] czy stosować reguły dni wolnych i zamian
+ * @param {boolean} [isCustom=false] czy to wydarzenie własne (off-top), które można dodać w weekend/dzień wolny
  */
-export function datesFor(start, until, mode, manual = '', academicYear = null, applyAcademicYear = true) {
+export function datesFor(
+  start,
+  until,
+  mode,
+  manual = '',
+  academicYear = null,
+  applyAcademicYear = true,
+  isCustom = false,
+) {
   if (!validDate(start)) throw Error('Wybierz prawidłową datę.');
 
-  const year = applyAcademicYear ? academicYear : null;
+  const enforceHolidays = applyAcademicYear && !isCustom;
+  const year = enforceHolidays ? academicYear : null;
   const map = specialDayMap(year);
 
   if (mode === 'once') {
-    const special = map.get(start);
-    if (special?.type === 'holiday') throw holidayError(start, special);
+    if (enforceHolidays) {
+      const holiday = holidayFor(start, year);
+      if (holiday) throw holidayError(start, holiday);
+    }
     return [start];
   }
 
@@ -135,7 +171,7 @@ export function datesFor(start, until, mode, manual = '', academicYear = null, a
     if (!dates.length || dates.length > LIMITS.eventsPerSeries || !dates.every(validDate)) {
       throw Error('Podaj daty w formacie RRRR-MM-DD, oddzielone przecinkami.');
     }
-    const allowed = dates.filter((d) => map.get(d)?.type !== 'holiday');
+    const allowed = enforceHolidays ? dates.filter((d) => !holidayFor(d, year)) : dates;
     if (!allowed.length) throw Error('Wszystkie wskazane daty przypadają na dni wolne.');
     return allowed;
   }
@@ -150,7 +186,8 @@ export function datesFor(start, until, mode, manual = '', academicYear = null, a
 
   // Sprawdzamy każdy dzień zakresu: zajęcia odbywają się tam, gdzie obowiązuje plan dnia serii.
   for (let date = start; date <= until; date = addDays(date, 1)) {
-    if (effectiveDayKey(date, year, map) !== seriesDay) continue;
+    const dayKey = enforceHolidays ? effectiveDayKey(date, year, map) : getDayOfWeekKey(date);
+    if (dayKey !== seriesDay) continue;
     if (weeksBetween(start, date) % everyWeeks !== 0) continue;
 
     if (result.length >= LIMITS.eventsPerSeries) {
@@ -185,7 +222,7 @@ export function reconcileWithAcademicYear(plan, makeId) {
   const additions = [];
 
   for (const events of series.values()) {
-    if (events.length < 2) continue;
+    if (events.length < 2 || !events[0].subjectId) continue;
     events.sort((a, b) => a.date.localeCompare(b.date));
 
     // Dzień tygodnia serii = najczęstszy dzień wśród spotkań poza dniami specjalnymi.
