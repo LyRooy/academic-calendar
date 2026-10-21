@@ -605,10 +605,14 @@ function renderDay(date, dayName, weekEvents, specialDay, gridStartMin, gridEndM
     };
   }
 
-  // Renderowanie okienek między zajęciami
+  // Renderowanie okienek między zajęciami (z odstępem od sąsiadujących bloków zajęć)
+  const GAP_INSET_PX = 3;
   for (const gap of computeGaps(dayEvents)) {
-    const topPx = ((gap.startMin - gridStartMin) / SLOT_MINUTES) * SLOT_HEIGHT_PX;
-    const heightPx = (gap.durationMin / SLOT_MINUTES) * SLOT_HEIGHT_PX;
+    const topPx = ((gap.startMin - gridStartMin) / SLOT_MINUTES) * SLOT_HEIGHT_PX + GAP_INSET_PX;
+    const heightPx = Math.max(
+      SLOT_HEIGHT_PX - GAP_INSET_PX * 2,
+      (gap.durationMin / SLOT_MINUTES) * SLOT_HEIGHT_PX - GAP_INSET_PX * 2,
+    );
     let gapClass = 'gap-block';
     if (
       isRector &&
@@ -767,8 +771,12 @@ function renderEvent(event, layout, gridStartMin, specialDay = null) {
   const durationMin = Math.max(SLOT_MINUTES, endMin - startMin);
   const cancelledByRector = isEventCancelledByRector(event, specialDay);
 
-  const topPx = ((startMin - gridStartMin) / SLOT_MINUTES) * SLOT_HEIGHT_PX;
-  const heightPx = (durationMin / SLOT_MINUTES) * SLOT_HEIGHT_PX;
+  const EVENT_INSET_PX = 1;
+  const topPx = ((startMin - gridStartMin) / SLOT_MINUTES) * SLOT_HEIGHT_PX + EVENT_INSET_PX;
+  const heightPx = Math.max(
+    SLOT_HEIGHT_PX - EVENT_INSET_PX * 2,
+    (durationMin / SLOT_MINUTES) * SLOT_HEIGHT_PX - EVENT_INSET_PX * 2,
+  );
 
   let className = `event ${typeVisual.variant}`;
   if (event.remote) className += ' remote';
